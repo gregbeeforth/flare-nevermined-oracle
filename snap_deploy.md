@@ -32,26 +32,26 @@ In the SnapDeploy dashboard, go to your project's **Environment Variables** sect
 
 ### Required Variables
 
-| Variable | Value | Description |
-|---|---|---|
-| `NVM_API_KEY` | `sandbox:your-api-key` | Nevermined API key from [nevermined.app](https://nevermined.app) Settings |
-| `NVM_ENVIRONMENT` | `sandbox` | Use `sandbox` for testing, `live` for production |
-| `NEVERMINED_APP_ID` | `your-app-id` | From the Nevermined App dashboard |
-| `NEVERMINED_APP_SECRET` | `your-app-secret` | From the Nevermined App dashboard |
-| `JWT_SECRET` | `your-strong-secret` | Secret for signing/verifying JWTs |
-| `RECEIVER_ADDRESS` | `0xYourWalletAddress` | Wallet address to receive payments |
-| `FLARE_RPC_URL` | `https://coston2-api.flare.network/ext/C/rpc` | Coston2 testnet RPC (sandbox) |
-| `FTSO_FEED_IDS` | `0x01464c522f55534400000000000000000000,0x014254432f55534400000000000000000000` | FTSO feed IDs |
-| `NEVERMINED_PAYMENT_CHAIN` | `base` | Payment blockchain |
-| `PORT` | `3000` | Server port |
-| `NODE_ENV` | `production` | Node environment |
+| Variable                   | Value                                                                           | Description                                                               |
+| -------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `NVM_API_KEY`              | `sandbox:your-api-key`                                                          | Nevermined API key from [nevermined.app](https://nevermined.app) Settings |
+| `NVM_ENVIRONMENT`          | `sandbox`                                                                       | Use `sandbox` for testing, `live` for production                          |
+| `NEVERMINED_APP_ID`        | `your-app-id`                                                                   | From the Nevermined App dashboard                                         |
+| `NEVERMINED_APP_SECRET`    | `your-app-secret`                                                               | From the Nevermined App dashboard                                         |
+| `JWT_SECRET`               | `your-strong-secret`                                                            | Secret for signing/verifying JWTs                                         |
+| `RECEIVER_ADDRESS`         | `0xYourWalletAddress`                                                           | Wallet address to receive payments                                        |
+| `FLARE_RPC_URL`            | `https://coston2-api.flare.network/ext/C/rpc`                                   | Coston2 testnet RPC (sandbox)                                             |
+| `FTSO_FEED_IDS`            | `0x01464c522f55534400000000000000000000,0x014254432f55534400000000000000000000` | FTSO feed IDs                                                             |
+| `NEVERMINED_PAYMENT_CHAIN` | `base`                                                                          | Payment blockchain                                                        |
+| `PORT`                     | `3000`                                                                          | Server port                                                               |
+| `NODE_ENV`                 | `production`                                                                    | Node environment                                                          |
 
 ### Optional Variables
 
-| Variable | Value | Description |
-|---|---|---|
-| `TEST_RPC_URL` | `https://coston2-api.flare.network/ext/C/rpc` | Override RPC for tests |
-| `TEST_CHAIN_ID` | `114` | Override chain ID for tests |
+| Variable        | Value                                         | Description                 |
+| --------------- | --------------------------------------------- | --------------------------- |
+| `TEST_RPC_URL`  | `https://coston2-api.flare.network/ext/C/rpc` | Override RPC for tests      |
+| `TEST_CHAIN_ID` | `114`                                         | Override chain ID for tests |
 
 ## Step 4: Configure the Build
 
@@ -82,8 +82,9 @@ curl https://your-app.snapdeploy.app/health
 ```
 
 Expected response:
+
 ```json
-{"status":"ok","timestamp":"2026-08-02T00:00:00.000Z"}
+{ "status": "ok", "timestamp": "2026-08-02T00:00:00.000Z" }
 ```
 
 ### Test the Feed Endpoint (Requires JWT)
@@ -149,14 +150,14 @@ SnapDeploy keeps a history of deployments. Click **Deployments** and select a pr
 
 ## Troubleshooting
 
-| Issue | Solution |
-|---|---|
-| Container crashes on start | Check logs for missing env vars; ensure `NVM_API_KEY` and `JWT_SECRET` are set |
-| Health endpoint returns 500 | Verify `FLARE_RPC_URL` is accessible from the SnapDeploy network |
-| Feed endpoint returns 401 | Ensure JWT is valid and not expired; check `JWT_SECRET` matches |
-| Payment flow fails | Verify `NEVERMINED_APP_ID`, `NEVERMINED_APP_SECRET`, and proxy URL are configured |
-| Build fails | Check `Dockerfile` syntax; ensure `package.json` and `package-lock.json` are in the repo root |
-| Cold start delay | SnapDeploy containers auto-sleep after inactivity; first request may take 10-30s |
+| Issue                       | Solution                                                                                      |
+| --------------------------- | --------------------------------------------------------------------------------------------- |
+| Container crashes on start  | Check logs for missing env vars; ensure `NVM_API_KEY` and `JWT_SECRET` are set                |
+| Health endpoint returns 500 | Verify `FLARE_RPC_URL` is accessible from the SnapDeploy network                              |
+| Feed endpoint returns 401   | Ensure JWT is valid and not expired; check `JWT_SECRET` matches                               |
+| Payment flow fails          | Verify `NEVERMINED_APP_ID`, `NEVERMINED_APP_SECRET`, and proxy URL are configured             |
+| Build fails                 | Check `Dockerfile` syntax; ensure `package.json` and `package-lock.json` are in the repo root |
+| Cold start delay            | SnapDeploy containers auto-sleep after inactivity; first request may take 10-30s              |
 
 ## Production Deployment
 
