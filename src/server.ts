@@ -2,7 +2,7 @@ import express, { Request, Response } from "express";
 import cors from "cors";
 import * as dotenv from "dotenv";
 import { SignJWT } from "jose";
-import { FlareConsumer, OracleResponse, createConsumer } from "./flareConsumer.js";
+import { createConsumer } from "./flareConsumer.js";
 import { requireJwt } from "./jwtAuth.js";
 
 dotenv.config();
@@ -128,5 +128,3 @@ function startServer(): void {
 }
 
 export { app, startServer };
-
-startServer();

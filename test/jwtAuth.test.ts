@@ -1,4 +1,4 @@
-import { requireJwt, JwtPayload } from "../src/jwtAuth";
+import { requireJwt, JwtPayload } from "../src/jwtAuth.js";
 import { SignJWT } from "jose";
 import type { Request, Response, NextFunction } from "express";
 

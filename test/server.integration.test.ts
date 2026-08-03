@@ -1,5 +1,5 @@
 import request from "supertest";
-import { app } from "../src/server";
+import { app } from "../src/server.js";
 import { SignJWT } from "jose";
 
 const JWT_SECRET = process.env.JWT_SECRET || "test-jwt-secret";

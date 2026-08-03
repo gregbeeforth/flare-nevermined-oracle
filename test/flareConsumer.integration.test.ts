@@ -1,4 +1,4 @@
-import { FlareConsumer, createConsumer } from "../src/flareConsumer";
+import { FlareConsumer, createConsumer } from "../src/flareConsumer.js";
 
 jest.setTimeout(30000);
 

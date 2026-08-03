@@ -1,4 +1,4 @@
-import { createConsumer } from "../src/flareConsumer";
+import { createConsumer } from "../src/flareConsumer.js";
 
 describe("createConsumer", () => {
   const originalEnv = { ...process.env };
