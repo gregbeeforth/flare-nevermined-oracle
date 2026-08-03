@@ -33,6 +33,8 @@ export interface OracleResponse {
   requestId: string;
 }
 
+const BYTES21_LENGTH = 42;
+
 export class FlareConsumer {
   private provider: ethers.JsonRpcProvider;
   private feedIds: string[];
@@ -40,7 +42,28 @@ export class FlareConsumer {
 
   constructor(rpcUrl: string, feedIds: string[]) {
     this.provider = new ethers.JsonRpcProvider(rpcUrl);
-    this.feedIds = feedIds;
+    this.feedIds = feedIds.map((id) => this.normalizeFeedId(id));
+  }
+
+  private normalizeFeedId(feedId: string): string {
+    if (!feedId.startsWith("0x")) {
+      throw new Error(`Feed ID must start with "0x": ${feedId}`);
+    }
+    const hex = feedId.slice(2);
+    if (hex.length > BYTES21_LENGTH) {
+      throw new Error(
+        `Feed ID exceeds bytes21 length (42 hex chars): ${feedId}`,
+      );
+    }
+    if (hex.length % 2 !== 0) {
+      throw new Error(
+        `Feed ID has odd number of hex chars: ${feedId}`,
+      );
+    }
+    if (!/^[0-9a-fA-F]*$/.test(hex)) {
+      throw new Error(`Feed ID contains non-hex characters: ${feedId}`);
+    }
+    return feedId;
   }
 
   private async getChainId(): Promise<number> {
@@ -82,14 +105,15 @@ export class FlareConsumer {
   }
 
   async getFeed(feedId: string): Promise<FeedResult> {
+    const normalizedFeedId = this.normalizeFeedId(feedId);
     const ftsoV2Address = await this.resolveFtsoV2Address();
     const ftsoV2 = new ethers.Contract(ftsoV2Address, FTSO_V2_ABI, this.provider);
 
     const [value, decimals, timestamp] =
-      await ftsoV2.getFeedById(feedId as `0x${string}`);
+      await ftsoV2.getFeedById(normalizedFeedId as `0x${string}`);
 
     return {
-      feedId,
+      feedId: normalizedFeedId,
       value: ethers.formatUnits(value, decimals),
       decimals: Number(decimals),
       timestamp: Number(timestamp),
