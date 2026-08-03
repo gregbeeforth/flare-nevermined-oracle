@@ -4,6 +4,11 @@ set -e
 echo "=== Flare Nevermined Oracle E2E Test ==="
 echo ""
 
+# Load environment variables from .env file
+set -a
+source .env
+set +a
+
 BASE_URL="https://nevermined-oracle-7c351.containers.snapdeploy.app"
 
 echo "--- Step 1: Health Check ---"
