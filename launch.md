@@ -25,7 +25,7 @@ Edit `.env` with the following values:
 FLARE_RPC_URL=https://coston2-api.flare.network/ext/C/rpc
 
 # FTSO feed IDs — Coston2-specific (21-byte bytes21 format)
-FTSO_FEED_IDS=0x01464c522f5553440000000000000000000000,0x014254432f5553440000000000000000000000
+FTSO_FEED_IDS=0x01464c522f55534400000000000000000000000000,0x014254432f55534400000000000000000000000000
 
 # JWT secret — used for auth middleware and E2E tests
 JWT_SECRET=your-secure-random-secret-here

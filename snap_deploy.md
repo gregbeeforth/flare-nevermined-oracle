@@ -40,7 +40,7 @@ In the SnapDeploy dashboard, go to your project's **Environment Variables** sect
 | `JWT_SECRET`               | `your-strong-secret`                                                            | Secret for signing/verifying JWTs                                         |
 | `RECEIVER_ADDRESS`         | `0xYourWalletAddress`                                                           | Wallet address to receive payments                                        |
 | `FLARE_RPC_URL`            | `https://coston2-api.flare.network/ext/C/rpc`                                   | Coston2 testnet RPC (sandbox)                                             |
-| `FTSO_FEED_IDS`            | `0x01464c522f555344000000000000000000,0x014254432f55534400000000000000000000` | FTSO feed IDs                                                             |
+| `FTSO_FEED_IDS`            | `0x01464c522f55534400000000000000000000000000,0x014254432f55534400000000000000000000000000` | FTSO feed IDs                                                             |
 | `NEVERMINED_PAYMENT_CHAIN` | `base`                                                                          | Payment blockchain                                                        |
 | `PORT`                     | `3000`                                                                          | Server port                                                               |
 | `NODE_ENV`                 | `production`                                                                    | Node environment                                                          |
@@ -203,14 +203,14 @@ Expected response:
   "data": {
     "feeds": [
       {
-        "feedId": "0x01464c522f5553440000000000000000000",
+        "feedId": "0x01464c522f55534400000000000000000000000000",
         "value": "1.2345",
         "decimals": 18,
         "timestamp": 1234567890,
         "valueInWei": "1234500000000000000000"
       },
       {
-        "feedId": "0x014254432f5553440000000000000000000",
+        "feedId": "0x014254432f55534400000000000000000000000000",
         "value": "67890.12",
         "decimals": 2,
         "timestamp": 1234567890,

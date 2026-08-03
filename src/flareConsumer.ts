@@ -149,7 +149,7 @@ export class FlareConsumer {
 export function createConsumer(): FlareConsumer {
   const rpcUrl =
     process.env.FLARE_RPC_URL || "https://flare-api.flare.network/ext/C/rpc";
-  const feedIdsRaw = process.env.FTSO_FEED_IDS || "0x01464c522f55534400000000000000000000000";
+  const feedIdsRaw = process.env.FTSO_FEED_IDS || "0x01464c522f55534400000000000000000000000000";
   const feedIds = feedIdsRaw.split(",").map((id) => id.trim());
 
   return new FlareConsumer(rpcUrl, feedIds);

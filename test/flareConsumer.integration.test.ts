@@ -13,7 +13,7 @@ if (!rpcUrl) {
     let consumer: FlareConsumer;
 
     beforeAll(() => {
-      const feedIdsRaw = process.env.FTSO_FEED_IDS || "0x01464c522f555344000000000000";
+      const feedIdsRaw = process.env.FTSO_FEED_IDS || "0x01464c522f55534400000000000000000000000000";
       const feedIds = feedIdsRaw.split(",").map((id) => id.trim());
       consumer = new FlareConsumer(rpcUrl, feedIds);
     });
@@ -28,7 +28,7 @@ if (!rpcUrl) {
 
     describe("getFeed", () => {
       it("should return a non-zero value for a known Coston2 feed ID", async () => {
-        const feedId = (process.env.FTSO_FEED_IDS || "0x01464c522f555344000000000000000000000000").split(",")[0].trim();
+        const feedId = (process.env.FTSO_FEED_IDS || "0x01464c522f55534400000000000000000000000000").split(",")[0].trim();
         const result = await consumer.getFeed(feedId);
         expect(result.value).toBeDefined();
         expect(result.value).not.toBe("0");
@@ -85,7 +85,7 @@ if (!rpcUrl) {
     describe("error handling", () => {
       it("should throw with an invalid RPC URL", async () => {
         const badConsumer = new FlareConsumer("http://localhost:1", [
-          "0x01464c522f555344000000000000",
+          "0x01464c522f55534400000000000000000000000000",
         ]);
         await expect(badConsumer.resolveFtsoV2Address()).rejects.toThrow();
       });
