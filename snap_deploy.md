@@ -36,8 +36,6 @@ In the SnapDeploy dashboard, go to your project's **Environment Variables** sect
 | -------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | `NVM_API_KEY`              | `sandbox:your-api-key`                                                          | Nevermined API key from [nevermined.app](https://nevermined.app) Settings |
 | `NVM_ENVIRONMENT`          | `sandbox`                                                                       | Nevermined environment (sandbox or live)                                |
-| `NVM_PLAN_ID`             | `your-plan-id`                                                                  | From the Nevermined App dashboard                                         |
-| `NVM_AGENT_ID`            | `your-agent-id`                                                                 | From the Nevermined App dashboard                                         |
 | `JWT_SECRET`               | `your-strong-secret`                                                            | Secret for signing/verifying JWTs                                         |
 | `RECEIVER_ADDRESS`         | `0xYourWalletAddress`                                                           | Wallet address to receive payments                                        |
 | `FLARE_RPC_URL`            | `https://coston2-api.flare.network/ext/C/rpc`                                   | Coston2 testnet RPC (sandbox)                                             |
@@ -51,7 +49,6 @@ In the SnapDeploy dashboard, go to your project's **Environment Variables** sect
 | Variable                   | Value                                         | Description                 |
 | -------------------------- | --------------------------------------------- | --------------------------- |
 | `NEVERMINED_APP_ID`        | `your-app-id`                                 | From the Nevermined App dashboard (used for asset publishing) |
-| `NEVERMINED_APP_SECRET`    | `your-app-secret`                             | From the Nevermined App dashboard (used for asset publishing) |
 | `TEST_RPC_URL`             | `https://coston2-api.flare.network/ext/C/rpc` | Override RPC for tests      |
 | `TEST_CHAIN_ID`            | `114`                                         | Override chain ID for tests |
 
