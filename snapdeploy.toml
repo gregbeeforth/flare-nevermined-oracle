@@ -8,7 +8,6 @@ dockerfile = "Dockerfile"
 [env]
 NVM_API_KEY = ""
 NVM_ENVIRONMENT = "sandbox"
-NEVERMINED_APP_ID = ""
 NEVERMINED_APP_SECRET = ""
 NEVERMINED_PAYMENT_CHAIN = "base"
 NVM_AGENT_ID = ""
