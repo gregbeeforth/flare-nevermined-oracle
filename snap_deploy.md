@@ -35,12 +35,13 @@ In the SnapDeploy dashboard, go to your project's **Environment Variables** sect
 | Variable                   | Value                                                                           | Description                                                               |
 | -------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | `NVM_API_KEY`              | `sandbox:your-api-key`                                                          | Nevermined API key from [nevermined.app](https://nevermined.app) Settings |
+| `NVM_ENVIRONMENT`          | `sandbox`                                                                       | Nevermined environment (sandbox or live)                                |
 | `NVM_PLAN_ID`             | `your-plan-id`                                                                  | From the Nevermined App dashboard                                         |
 | `NVM_AGENT_ID`            | `your-agent-id`                                                                 | From the Nevermined App dashboard                                         |
 | `JWT_SECRET`               | `your-strong-secret`                                                            | Secret for signing/verifying JWTs                                         |
 | `RECEIVER_ADDRESS`         | `0xYourWalletAddress`                                                           | Wallet address to receive payments                                        |
 | `FLARE_RPC_URL`            | `https://coston2-api.flare.network/ext/C/rpc`                                   | Coston2 testnet RPC (sandbox)                                             |
-| `FTSO_FEED_IDS`            | `0x01464c522f55534400000000000000000000000000,0x014254432f55534400000000000000000000000000` | FTSO feed IDs                                                             |
+| `FTSO_FEED_IDS`            | `0x01464c522f5553440000000000000000000000,0x014254432f5553440000000000000000000000` | FTSO feed IDs                                                             |
 | `NEVERMINED_PAYMENT_CHAIN` | `base`                                                                          | Payment blockchain                                                        |
 | `PORT`                     | `3000`                                                                          | Server port                                                               |
 | `NODE_ENV`                 | `production`                                                                    | Node environment                                                          |
@@ -291,6 +292,7 @@ SnapDeploy keeps a history of deployments. Click **Deployments** and select a pr
 | Issue                       | Solution                                                                                      |
 | --------------------------- | --------------------------------------------------------------------------------------------- |
 | Container crashes on start  | Check logs for missing env vars; ensure `NVM_API_KEY` and `JWT_SECRET` are set                |
+| WAIT_FOR_HEALTHY failing    | Verify all required env vars are set; switch base image from `node:20-alpine` to `node:20-slim` if native deps fail |
 | Health endpoint returns 500 | Verify `FLARE_RPC_URL` is accessible from the SnapDeploy network                              |
 | Feed endpoint returns 401   | Ensure JWT is valid and not expired; check `JWT_SECRET` matches                               |
 | Payment flow fails          | Verify `NVM_API_KEY`, `NVM_PLAN_ID`, and `NVM_AGENT_ID` are set correctly |
