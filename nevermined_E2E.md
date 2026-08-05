@@ -25,14 +25,15 @@ This plan covers testing the full payment pipeline on the Nevermined sandbox: pu
 | 1.2 | Save token to env var | `X402_TOKEN=$(node get-x402-token.mjs)` | `$X402_TOKEN` is non-empty |
 | 1.3 | Inspect token contents | Decode the token (base64url-encoded JSON) and verify `accepted.planId` and `accepted.extra.agentId` match your values | Claims match `.env` values |
 
-## Phase 2: x402 → JWT Exchange (SnapDeploy Proxy)
+## Phase 2: x402 → JWT Exchange (SnapDeploy Proxy with Payment Verification)
 
 | # | Step | Command | Expected Result |
 |---|------|---------|-----------------|
 | 2.1 | Exchange x402 token for JWT via SnapDeploy | `PROXY_TOKEN=$(curl -s -X POST https://nevermined-oracle-7c351.containers.snapdeploy.app/api/v1/x402/exchange -H "Content-Type: application/json" -H "Authorization: Bearer $X402_TOKEN" \| jq -r '.token')` | `PROXY_TOKEN` is a non-empty JWT string |
 | 2.2 | Verify JWT structure | Decode the JWT header/payload and check `sub` contains the agent ID, `planId` matches, `exp` is ~1 hour in the future | Claims are correct and token is time-bound |
-| 2.3 | Test with invalid token | `curl -s -X POST https://nevermined-oracle-7c351.containers.snapdeploy.app/api/v1/x402/exchange -H "Authorization: Bearer invalid_token"` | Returns `{"success":false,"error":"Invalid x402 token"}` with 401 |
+| 2.3 | Test with invalid x402 token | `curl -s -X POST https://nevermined-oracle-7c351.containers.snapdeploy.app/api/v1/x402/exchange -H "Authorization: Bearer invalid_token"` | Returns `{"success":false,"error":"x402 token verification failed: ..."}` with 401 |
 | 2.4 | Test without auth header | `curl -s -X POST https://nevermined-oracle-7c351.containers.snapdeploy.app/api/v1/x402/exchange -H "Content-Type: application/json"` | Returns 401 with "Missing or malformed Authorization header" |
+| 2.5 | Verify proxy checks payment with Nevermined facilitator | The proxy calls `payments.facilitator.verifyPermissions()` before issuing a JWT, confirming the x402 token is backed by a real Nevermined purchase | Invalid or unverified tokens are rejected with 401 |
 
 ## Phase 3: Feed Access via JWT
 
@@ -48,8 +49,9 @@ This plan covers testing the full payment pipeline on the Nevermined sandbox: pu
 | # | Step | Command | Expected Result |
 |---|------|---------|-----------------|
 | 4.1 | Run the full flow script | ```bash X402_TOKEN=$(node get-x402-token.mjs) && PROXY_TOKEN=$(curl -s -X POST https://nevermined-oracle-7c351.containers.snapdeploy.app/api/v1/x402/exchange -H "Content-Type: application/json" -H "Authorization: Bearer $X402_TOKEN" \| jq -r '.token') && curl -s -H "Authorization: Bearer $PROXY_TOKEN" https://nevermined-oracle-7c351.containers.snapdeploy.app/api/v1/feed \| python3 -m json.tool ``` | Returns valid feed data with `success: true` |
-| 4.2 | Repeat to test token expiry | Wait for the JWT to expire (or use a short-lived token), then repeat step 4.1 | Feed access fails with 401, confirming JWT expiry works |
-| 4.3 | Test cold start | Wait 10+ minutes for the SnapDeploy container to sleep, then run step 4.1 | First request may take 10-30s (cold start), subsequent requests are fast |
+| 4.2 | Verify proxy payment verification | The proxy calls `payments.facilitator.verifyPermissions()` before issuing a JWT, confirming the x402 token is backed by a real Nevermined purchase | Invalid or unverified tokens are rejected with 401 |
+| 4.3 | Repeat to test token expiry | Wait for the JWT to expire (or use a short-lived token), then repeat step 4.1 | Feed access fails with 401, confirming JWT expiry works |
+| 4.4 | Test cold start | Wait 10+ minutes for the SnapDeploy container to sleep, then run step 4.1 | First request may take 10-30s (cold start), subsequent requests are fast |
 
 ## Phase 5: Edge Cases & Error Handling
 
