@@ -55,36 +55,52 @@ echo "Feed data verified"
 echo ""
 
 echo "--- Step 6: Test invalid x402 token is rejected by proxy ---"
-INVALID_EXCHANGE=$(curl -s -X POST "$BASE_URL/api/v1/x402/exchange" \
+INVALID_HTTP_CODE=$(curl -s -o /tmp/invalid_exchange.json -w "%{http_code}" -X POST "$BASE_URL/api/v1/x402/exchange" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer invalid_x402_token")
-INVALID_ERROR=$(echo "$INVALID_EXCHANGE" | jq -r '.error')
-if [ "$INVALID_ERROR" = "null" ] || [ -z "$INVALID_ERROR" ]; then
-  echo "WARNING: Invalid x402 token was not rejected (proxy may be skipping verification)"
+if [ "$INVALID_HTTP_CODE" = "401" ]; then
+  INVALID_ERROR=$(jq -r '.error' /tmp/invalid_exchange.json 2>/dev/null)
+  if [ -n "$INVALID_ERROR" ] && [ "$INVALID_ERROR" != "null" ]; then
+    echo "Invalid x402 token correctly rejected (HTTP $INVALID_HTTP_CODE): $INVALID_ERROR"
+  else
+    echo "Invalid x402 token rejected with HTTP $INVALID_HTTP_CODE (no error detail in response)"
+  fi
 else
-  echo "Invalid x402 token correctly rejected: $INVALID_ERROR"
+  echo "WARNING: Invalid x402 token was not rejected (HTTP $INVALID_HTTP_CODE)"
+  cat /tmp/invalid_exchange.json
 fi
 echo ""
 
 echo "--- Step 7: Test missing auth header is rejected by proxy ---"
-NO_AUTH_EXCHANGE=$(curl -s -X POST "$BASE_URL/api/v1/x402/exchange" \
+NO_AUTH_HTTP_CODE=$(curl -s -o /tmp/no_auth_exchange.json -w "%{http_code}" -X POST "$BASE_URL/api/v1/x402/exchange" \
   -H "Content-Type: application/json")
-NO_AUTH_STATUS=$(echo "$NO_AUTH_EXCHANGE" | jq -r '.error')
-if [ -n "$NO_AUTH_STATUS" ] && [ "$NO_AUTH_STATUS" != "null" ]; then
-  echo "Missing auth header correctly rejected"
+if [ "$NO_AUTH_HTTP_CODE" = "401" ]; then
+  NO_AUTH_ERROR=$(jq -r '.error' /tmp/no_auth_exchange.json 2>/dev/null)
+  if [ -n "$NO_AUTH_ERROR" ] && [ "$NO_AUTH_ERROR" != "null" ]; then
+    echo "Missing auth header correctly rejected (HTTP $NO_AUTH_HTTP_CODE): $NO_AUTH_ERROR"
+  else
+    echo "Missing auth header rejected with HTTP $NO_AUTH_HTTP_CODE (no error detail in response)"
+  fi
 else
-  echo "WARNING: Missing auth header was not rejected"
+  echo "WARNING: Missing auth header was not rejected (HTTP $NO_AUTH_HTTP_CODE)"
+  cat /tmp/no_auth_exchange.json
 fi
 echo ""
 
 echo "--- Step 8: Test invalid JWT is rejected for feed access ---"
-INVALID_FEED=$(curl -s -H "Authorization: Bearer invalid_jwt" "$BASE_URL/api/v1/feed")
-INVALID_FEED_ERROR=$(echo "$INVALID_FEED" | jq -r '.error')
-if [ "$INVALID_FEED_ERROR" = "null" ] || [ -z "$INVALID_FEED_ERROR" ]; then
-  echo "WARNING: Invalid JWT was not rejected"
+INVALID_FEED_HTTP_CODE=$(curl -s -o /tmp/invalid_feed.json -w "%{http_code}" -H "Authorization: Bearer invalid_jwt" "$BASE_URL/api/v1/feed")
+if [ "$INVALID_FEED_HTTP_CODE" = "401" ]; then
+  INVALID_FEED_ERROR=$(jq -r '.error' /tmp/invalid_feed.json 2>/dev/null)
+  if [ -n "$INVALID_FEED_ERROR" ] && [ "$INVALID_FEED_ERROR" != "null" ]; then
+    echo "Invalid JWT correctly rejected (HTTP $INVALID_FEED_HTTP_CODE): $INVALID_FEED_ERROR"
+  else
+    echo "Invalid JWT rejected with HTTP $INVALID_FEED_HTTP_CODE (no error detail in response)"
+  fi
 else
-  echo "Invalid JWT correctly rejected: $INVALID_FEED_ERROR"
+  echo "WARNING: Invalid JWT was not rejected (HTTP $INVALID_FEED_HTTP_CODE)"
+  cat /tmp/invalid_feed.json
 fi
 echo ""
 
 echo "=== E2E Test Complete ==="
+rm -f /tmp/invalid_exchange.json /tmp/no_auth_exchange.json /tmp/invalid_feed.json
