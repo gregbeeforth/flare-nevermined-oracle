@@ -128,3 +128,5 @@ function startServer(): void {
 }
 
 export { app, startServer };
+
+startServer();
