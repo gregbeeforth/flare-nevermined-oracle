@@ -40,6 +40,13 @@ describe("normalizeFeedId", () => {
     expect(consumer).toBeDefined();
   });
 
+  it("should auto-correct x0 prefix to 0x", () => {
+    const consumer = new FlareConsumer("http://localhost", [
+      "x01464c522f555344000000000000000000",
+    ]);
+    expect(consumer).toBeDefined();
+  });
+
   it("should reject feed IDs without 0x prefix", () => {
     expect(() => {
       new FlareConsumer("http://localhost", ["01464c522f555344000000000000000000"]);

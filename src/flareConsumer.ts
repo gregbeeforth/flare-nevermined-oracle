@@ -46,6 +46,9 @@ export class FlareConsumer {
   }
 
   private normalizeFeedId(feedId: string): string {
+    if (feedId.startsWith("x0")) {
+      feedId = "0x" + feedId.slice(1);
+    }
     if (!feedId.startsWith("0x")) {
       throw new Error(`Feed ID must start with "0x": ${feedId}`);
     }
