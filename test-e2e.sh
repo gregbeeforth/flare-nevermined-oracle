@@ -10,30 +10,55 @@ set +a
 
 BASE_URL="https://nevermined-oracle-7c351.containers.snapdeploy.app"
 
+# SnapDeploy containers sleep after inactivity and take 60-90s to wake (503/wake page).
+# These constants give every HTTP check up to ~2 minutes of retries.
+MAX_RETRIES=24
+RETRY_DELAY=5
+
 function is_json() {
   echo "$1" | python3 -m json.tool > /dev/null 2>&1
 }
 
 function check_server() {
   local url="$1"
-  local max_retries=3
   local retry=0
-  while [ $retry -lt $max_retries ]; do
+  while [ $retry -lt $MAX_RETRIES ]; do
     local http_code
     http_code=$(curl -s -o /dev/null -w "%{http_code}" "$url" 2>/dev/null || echo "000")
     if [ "$http_code" = "200" ] || [ "$http_code" = "401" ]; then
       return 0
     fi
     retry=$((retry + 1))
-    echo "  Retrying ($retry/$max_retries)..."
-    sleep 5
+    echo "  Retrying ($retry/$MAX_RETRIES)..."
+    sleep $RETRY_DELAY
+  done
+  return 1
+}
+
+# Run a curl command storing "<body>\n<http_code>" into the named variable.
+# Retries only while the container is still waking up (503/308/520) or
+# unreachable (000); stops immediately on any other definitive response.
+function curl_with_retry() {
+  local -n response_var="$1"
+  shift
+  local retry=0
+  while [ $retry -lt $MAX_RETRIES ]; do
+    response_var=$(curl -s -w "\n%{http_code}" "$@" || echo "000")
+    local http_code
+    http_code=$(echo "$response_var" | tail -1)
+    if [ "$http_code" != "503" ] && [ "$http_code" != "308" ] && [ "$http_code" != "520" ] && [ "$http_code" != "000" ]; then
+      return 0
+    fi
+    retry=$((retry + 1))
+    echo "  Retrying ($retry/$MAX_RETRIES) on HTTP $http_code..."
+    sleep $RETRY_DELAY
   done
   return 1
 }
 
 echo "--- Step 1: Health Check ---"
 if ! check_server "$BASE_URL/health"; then
-  echo "ERROR: Server is not reachable (HTTP 520 or timeout). Is SnapDeploy container running?"
+  echo "ERROR: Server is not reachable. Is SnapDeploy container running?"
   echo "  Try: curl -s -o /dev/null -w '%{http_code}' $BASE_URL/health"
   exit 1
 fi
@@ -46,8 +71,12 @@ fi
 echo "$HEALTH" | python3 -m json.tool
 echo ""
 
-echo "--- Step 2: Get x402 Token (real purchase via Nevermined SDK) ---"
-X402_TOKEN=$(NVM_API_KEY="$NVM_API_KEY" NVM_PLAN_ID="$NVM_PLAN_ID" NVM_AGENT_ID="$NVM_AGENT_ID" node get-x402-token.mjs 2>/dev/null)
+echo "--- Step 2: Get x402 Token (fiat / card-delegation via Nevermined SDK) ---"
+echo "NOTE: Uses get-x402-token-fiat.mjs. Plan $NVM_PLAN_ID is nvm:card-delegation;"
+echo "      get-x402-token.mjs (erc4337) will NOT work for it. The CLI's"
+echo "      'x402token get-x402-access-token --payment-type fiat' currently fails"
+echo "      with HTTP 402 (inline delegation creation was removed)."
+X402_TOKEN=$(NVM_API_KEY="$NVM_API_KEY" NVM_PLAN_ID="$NVM_PLAN_ID" NVM_AGENT_ID="$NVM_AGENT_ID" node get-x402-token-fiat.mjs 2>/dev/null)
 if [ -z "$X402_TOKEN" ]; then
   echo "ERROR: Failed to get x402 token"
   exit 1
@@ -55,17 +84,26 @@ fi
 echo "x402 token obtained (${#X402_TOKEN} chars)"
 echo ""
 
-echo "--- Step 3: Exchange x402 Token for JWT (proxy verifies payment via facilitator) ---"
-EXCHANGE_RESP=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/api/v1/x402/exchange" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $X402_TOKEN" || echo "000")
-EXCHANGE_HTTP_CODE=$(echo "$EXCHANGE_RESP" | tail -1)
-EXCHANGE_BODY=$(echo "$EXCHANGE_RESP" | sed '$d')
+echo "--- Step 2b: Verify purchase via Nevermined CLI ---"
+echo "$ nevermined plans get-plan-balance $NVM_PLAN_ID"
+BALANCE=$(nevermined plans get-plan-balance "$NVM_PLAN_ID" -f json 2>/dev/null) || BALANCE=""
+if [ -z "$BALANCE" ]; then
+  echo "WARNING: CLI balance check failed (is the CLI authenticated?)"
+else
+  echo "$BALANCE" | python3 -m json.tool
+fi
+echo ""
 
-if [ "$EXCHANGE_HTTP_CODE" = "000" ]; then
-  echo "ERROR: Connection failed. Is SnapDeploy container running?"
+echo "--- Step 3: Exchange x402 Token for JWT (proxy verifies payment via facilitator) ---"
+EXCHANGE_RESP=""
+if ! curl_with_retry EXCHANGE_RESP -X POST "$BASE_URL/api/v1/x402/exchange" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $X402_TOKEN"; then
+  echo "ERROR: Exchange failed (container unreachable or never became ready)"
   exit 1
 fi
+EXCHANGE_HTTP_CODE=$(echo "$EXCHANGE_RESP" | tail -1)
+EXCHANGE_BODY=$(echo "$EXCHANGE_RESP" | sed '$d')
 
 if [ "$EXCHANGE_HTTP_CODE" != "200" ]; then
   echo "ERROR: Exchange returned HTTP $EXCHANGE_HTTP_CODE"
@@ -82,14 +120,13 @@ echo "JWT obtained (${#PROXY_TOKEN} chars)"
 echo ""
 
 echo "--- Step 4: Query Feed with JWT ---"
-FEED_RESP=$(curl -s -w "\n%{http_code}" -H "Authorization: Bearer $PROXY_TOKEN" "$BASE_URL/api/v1/feed" || echo "000")
-FEED_HTTP_CODE=$(echo "$FEED_RESP" | tail -1)
-FEED_BODY=$(echo "$FEED_RESP" | sed '$d')
-
-if [ "$FEED_HTTP_CODE" = "000" ]; then
-  echo "ERROR: Connection failed. Is SnapDeploy container running?"
+FEED_RESP=""
+if ! curl_with_retry FEED_RESP -H "Authorization: Bearer $PROXY_TOKEN" "$BASE_URL/api/v1/feed"; then
+  echo "ERROR: Feed request failed (container unreachable or never became ready)"
   exit 1
 fi
+FEED_HTTP_CODE=$(echo "$FEED_RESP" | tail -1)
+FEED_BODY=$(echo "$FEED_RESP" | sed '$d')
 
 if [ "$FEED_HTTP_CODE" != "200" ]; then
   echo "ERROR: Feed request returned HTTP $FEED_HTTP_CODE"
