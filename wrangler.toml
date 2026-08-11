@@ -1,0 +1,16 @@
+name = "flare-nevermined-oracle"
+main = "src/worker.ts"
+compatibility_date = "2026-08-11"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+FLARE_RPC_URL = "https://flare-api.flare.network/ext/C/rpc"
+FTSO_FEED_IDS = "0x01464c522f55534400000000000000000000000000,0x014254432f55534400000000000000000000000000"
+NODE_ENV = "production"
+NEVERMINED_PAYMENT_CHAIN = "base"
+
+[observability]
+enabled = true
+
+# Secrets are set via `wrangler secret put` and must NOT be committed:
+#   JWT_SECRET, NVM_API_KEY, NEVERMINED_APP_ID, NEVERMINED_APP_SECRET, RECEIVER_ADDRESS

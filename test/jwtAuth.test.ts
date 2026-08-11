@@ -1,19 +1,19 @@
-import { requireJwt, JwtPayload } from "../src/jwtAuth.js";
+import { Hono } from "hono";
+import { requireJwt, type JwtPayload } from "../src/jwtAuth.js";
 import { SignJWT } from "jose";
-import type { Request, Response, NextFunction } from "express";
 
 const JWT_SECRET = "test-jwt-secret";
 
-beforeAll(() => {
-  process.env.JWT_SECRET = JWT_SECRET;
-});
+type TestEnv = {
+  Bindings: { JWT_SECRET: string };
+  Variables: { user?: JwtPayload };
+};
 
-afterAll(() => {
-  delete process.env.JWT_SECRET;
-});
-
-function flush(): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, 10));
+function makeApp(): Hono<TestEnv> {
+  const app = new Hono<TestEnv>();
+  app.use("*", requireJwt);
+  app.get("/", (c) => c.json({ ok: true, sub: c.get("user")?.sub }));
+  return app;
 }
 
 async function makeToken(
@@ -27,113 +27,89 @@ async function makeToken(
     .sign(secret);
 }
 
-function makeReq(headers: Record<string, string> = {}): Request {
-  return { headers } as Request;
-}
-
-function makeRes(): Response {
-  const res = {
-    status: jest.fn().mockReturnThis(),
-    json: jest.fn(),
-  } as unknown as Response;
-  return res;
-}
-
-function makeNext(): NextFunction {
-  return jest.fn();
-}
-
 describe("requireJwt", () => {
-  it("should return 401 when Authorization header is missing", () => {
-    const req = makeReq();
-    const res = makeRes();
-    const next = makeNext();
+  it("should return 401 when Authorization header is missing", async () => {
+    const app = makeApp();
+    const res = await app.request("/", undefined, { JWT_SECRET });
 
-    requireJwt(req, res, next);
-
-    expect(res.status).toHaveBeenCalledWith(401);
-    expect(res.json).toHaveBeenCalledWith({
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({
       success: false,
       error: "Missing or malformed Authorization header",
     });
-    expect(next).not.toHaveBeenCalled();
   });
 
-  it("should return 401 when Authorization header is not Bearer", () => {
-    const req = makeReq({ authorization: "Basic abc123" });
-    const res = makeRes();
-    const next = makeNext();
+  it("should return 401 when Authorization header is not Bearer", async () => {
+    const app = makeApp();
+    const res = await app.request(
+      "/",
+      { headers: { authorization: "Basic abc123" } },
+      { JWT_SECRET },
+    );
 
-    requireJwt(req, res, next);
-
-    expect(res.status).toHaveBeenCalledWith(401);
-    expect(res.json).toHaveBeenCalledWith({
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({
       success: false,
       error: "Missing or malformed Authorization header",
     });
-    expect(next).not.toHaveBeenCalled();
   });
 
   it("should return 401 when token is invalid", async () => {
-    const req = makeReq({ authorization: "Bearer invalid-token" });
-    const res = makeRes();
-    const next = makeNext();
+    const app = makeApp();
+    const res = await app.request(
+      "/",
+      { headers: { authorization: "Bearer invalid-token" } },
+      { JWT_SECRET },
+    );
 
-    requireJwt(req, res, next);
-    await flush();
-
-    expect(res.status).toHaveBeenCalledWith(401);
-    expect(res.json).toHaveBeenCalledWith({
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({
       success: false,
       error: "Invalid or expired token",
     });
-    expect(next).not.toHaveBeenCalled();
   });
 
   it("should return 401 when token is expired", async () => {
     const token = await makeToken({}, "-1s");
-    const req = makeReq({ authorization: `Bearer ${token}` });
-    const res = makeRes();
-    const next = makeNext();
+    const app = makeApp();
+    const res = await app.request(
+      "/",
+      { headers: { authorization: `Bearer ${token}` } },
+      { JWT_SECRET },
+    );
 
-    requireJwt(req, res, next);
-    await flush();
-
-    expect(res.status).toHaveBeenCalledWith(401);
-    expect(res.json).toHaveBeenCalledWith({
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({
       success: false,
       error: "Invalid or expired token",
     });
-    expect(next).not.toHaveBeenCalled();
   });
 
-  it("should call next() and attach payload when token is valid", async () => {
+  it("should pass through and attach payload when token is valid", async () => {
     const token = await makeToken({ sub: "user123" });
-    const req = makeReq({ authorization: `Bearer ${token}` });
-    const res = makeRes();
-    const next = makeNext();
+    const app = makeApp();
+    const res = await app.request(
+      "/",
+      { headers: { authorization: `Bearer ${token}` } },
+      { JWT_SECRET },
+    );
 
-    requireJwt(req, res, next);
-    await flush();
-
-    expect(next).toHaveBeenCalled();
-    expect(req.user).toBeDefined();
-    expect((req.user as JwtPayload).sub).toBe("user123");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, sub: "user123" });
   });
 
   it("should return 401 when token has an invalid format", async () => {
-    const req = makeReq({ authorization: "Bearer definitely-not-a-jwt" });
-    const res = makeRes();
-    const next = makeNext();
+    const app = makeApp();
+    const res = await app.request(
+      "/",
+      { headers: { authorization: "Bearer definitely-not-a-jwt" } },
+      { JWT_SECRET },
+    );
 
-    requireJwt(req, res, next);
-    await flush();
-
-    expect(res.status).toHaveBeenCalledWith(401);
-    expect(res.json).toHaveBeenCalledWith({
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({
       success: false,
       error: "Invalid or expired token",
     });
-    expect(next).not.toHaveBeenCalled();
   });
 });

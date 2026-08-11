@@ -1,13 +1,5 @@
 import { jwtVerify } from "jose";
-import type { Request, Response, NextFunction } from "express";
-
-function getSecret(): Uint8Array {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    throw new Error("JWT_SECRET environment variable is not set");
-  }
-  return new TextEncoder().encode(secret);
-}
+import type { Context, Next } from "hono";
 
 export interface JwtPayload {
   sub: string;
@@ -16,39 +8,44 @@ export interface JwtPayload {
   [key: string]: unknown;
 }
 
-declare global {
-  // eslint-disable-next-line @typescript-eslint/no-namespace
-  namespace Express {
-    interface Request {
-      user?: JwtPayload;
-    }
-  }
+export interface AuthEnv {
+  Bindings: { JWT_SECRET: string };
+  Variables: { user?: JwtPayload };
+}
+
+function getSecret(secret: string): Uint8Array {
+  return new TextEncoder().encode(secret);
 }
 
 export function requireJwt(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): void {
-  const authHeader = req.headers.authorization;
+  c: Context<AuthEnv>,
+  next: Next,
+): Promise<Response | void> {
+  const authHeader = c.req.header("authorization");
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    res.status(401).json({
-      success: false,
-      error: "Missing or malformed Authorization header",
-    });
-    return;
+    return Promise.resolve(
+      c.json(
+        {
+          success: false,
+          error: "Missing or malformed Authorization header",
+        },
+        401,
+      ),
+    );
   }
 
   const token = authHeader.slice(7);
-  jwtVerify(token, getSecret(), { algorithms: ["HS256"] })
+  return jwtVerify(token, getSecret(c.env.JWT_SECRET), {
+    algorithms: ["HS256"],
+  })
     .then(({ payload }) => {
-      req.user = payload as JwtPayload;
-      next();
+      c.set("user", payload as JwtPayload);
+      return next();
     })
-    .catch(() => {
-      res.status(401).json({
+    .catch(() =>
+      c.json({
         success: false,
         error: "Invalid or expired token",
-      });
-    });
+      }, 401),
+    );
 }

@@ -2,12 +2,12 @@
 
 ## Overview
 
-A stateless Node.js service that reads decentralized consensus-driven asset prices from the Flare Blockchain via FTSOv2, exposes them through a JWT-gated JSON API, and gates access using Nevermined Payments infrastructure with time-bound JWT tokens.
+A stateless Cloudflare Worker that reads decentralized consensus-driven asset prices from the Flare Blockchain via FTSOv2, exposes them through a JWT-gated JSON API, and gates access using Nevermined Payments infrastructure with time-bound JWT tokens.
 
 ## Component Diagram
 
 ```
-Consumer Agent → Nevermined Proxy → Express API (server.ts) → FlareConsumer (flareConsumer.ts) → Flare Blockchain (FTSOv2)
+Consumer Agent → Nevermined Proxy → Hono Worker (worker.ts) → FlareConsumer (flareConsumer.ts) → Flare Blockchain (FTSOv2)
                                     ↑
                               JWT Auth (jwtAuth.ts)
 ```
@@ -21,29 +21,34 @@ Consumer Agent → Nevermined Proxy → Express API (server.ts) → FlareConsume
 - Reads FTSO price feeds (`getFeedById`, `getFeedsById`) — all `view` calls, no fees
 - Provides `getOracleData()` as an end-to-end aggregator (feeds + block height + network timestamp + request ID)
 - Network-aware: resolves `ContractRegistry` address per chain ID (14=Flare, 114=Coston2, 19=Songbird, 16=Coston)
-- Singleton pattern: one consumer instance reused across all requests in `server.ts`
+- Singleton pattern: one consumer instance reused across all requests in `worker.ts`
+- `createConsumer(rpcUrl, feedIds)` takes explicit arguments supplied from Worker bindings (no `process.env`)
 
-### `Express API` (`src/server.ts`)
+### `Hono Worker` (`src/worker.ts`)
 
-- Two endpoints: `/api/v1/feed` (JWT-gated) and `/health` (public)
+- Cloudflare Worker entry point built on [Hono](https://hono.dev)
+- Three endpoints: `GET /api/v1/feed` (JWT-gated), `POST /api/v1/x402/exchange` (public), `GET /health` (public)
 - `/api/v1/feed` calls `FlareConsumer.getOracleData()` and returns `{ success: true, data: OracleResponse }`
+- `/api/v1/x402/exchange` decodes the base64url x402 token, extracts `accepted.planId` / `accepted.extra.agentId`, and issues a time-bound (1h) JWT
 - `/health` returns `{ status: "ok", timestamp }` for liveness checks
-- CORS enabled, JSON body parsing
-- `dotenv.config()` called once at module load
-- Singleton `FlareConsumer` created at module level, reused across requests
+- CORS enabled via `hono/cors`
+- Configuration comes from Worker bindings (`env`), not `process.env`
+- Singleton `FlareConsumer` created lazily on first request, reused across requests
+- Requires `nodejs_compat` compatibility flag (ethers uses Node `crypto` primitives)
 
 ### `JWT Auth` (`src/jwtAuth.ts`)
 
-- Express middleware (`requireJwt`) that verifies `Authorization: Bearer <token>` headers
+- Hono middleware (`requireJwt`) that verifies `Authorization: Bearer <token>` headers
 - Uses `jose`'s `jwtVerify` with `algorithms: ["HS256"]` restriction (prevents algorithm confusion attacks)
-- Attaches decoded payload to `req.user` for downstream handlers
+- Attaches decoded payload to request context (`c.set("user", payload)`)
 - Returns 401 for missing/invalid/expired tokens
+- Secret read from `c.env.JWT_SECRET`
 
 ### `Nevermined Payments` (external, via `@nevermined-io/payments`)
 
 - Handles payment gating — consumers must pay to receive a JWT
-- The `publish-asset` script (`scripts/publishAsset.ts`) registers the oracle feed as a Nevermined asset with a pay-per-access plan
-- The Nevermined proxy sits between the consumer and the Express API, issuing JWTs after payment verification
+- The `publish-asset` script (`scripts/publishAsset.ts`) registers the oracle feed as a Nevermined asset with a pay-per-access plan (Node-side, not part of the Worker bundle)
+- The Nevermined proxy sits between the consumer and the Worker, issuing JWTs after payment verification
 
 ## Data Flow
 
@@ -56,25 +61,39 @@ Consumer Agent → Nevermined Proxy → Express API (server.ts) → FlareConsume
 
 ## Configuration
 
-| Variable | Purpose | Required |
-|----------|---------|----------|
-| `FLARE_RPC_URL` | Flare C-chain RPC endpoint | Yes |
-| `FTSO_FEED_IDS` | Comma-separated FTSO feed IDs to query | Yes |
-| `JWT_SECRET` | Secret for signing/verifying JWTs | Yes |
-| `PORT` | Express server port (default 3000) | No |
-| `NODE_ENV` | Environment (development/integration) | No |
-| `TEST_RPC_URL` | Override RPC URL for tests | No |
-| `TEST_CHAIN_ID` | Override chain ID for tests | No |
-| `NEVERMINED_APP_ID` | Nevermined app ID for asset publishing | No (publish only) |
-| `NEVERMINED_APP_SECRET` | Nevermined app secret for asset publishing | No (publish only) |
+Configuration is provided through Cloudflare Worker bindings:
+
+| Variable | Binding type | Purpose | Required |
+|----------|--------------|---------|----------|
+| `FLARE_RPC_URL` | `[vars]` | Flare C-chain RPC endpoint | Yes |
+| `FTSO_FEED_IDS` | `[vars]` | Comma-separated FTSO feed IDs to query | Yes |
+| `JWT_SECRET` | secret | Secret for signing/verifying JWTs | Yes |
+| `NODE_ENV` | `[vars]` | Environment | No |
+| `NEVERMINED_PAYMENT_CHAIN` | `[vars]` | Billing chain | No |
+| `NVM_API_KEY` | secret | Nevermined API key (publishing) | No (publish only) |
+| `NEVERMINED_APP_ID` | secret | Nevermined app ID (publishing) | No (publish only) |
+| `NEVERMINED_APP_SECRET` | secret | Nevermined app secret (publishing) | No (publish only) |
+| `RECEIVER_ADDRESS` | secret | Payment receiver address | No (publish only) |
+
+Secrets are set with `wrangler secret put <NAME>` and never committed. There is no `PORT` — Workers have no listening port.
 
 ## Test Architecture
 
 | Test Type | File(s) | Approach | Speed |
 |-----------|---------|----------|-------|
-| Unit | `test/flareConsumer.test.ts`, `test/jwtAuth.test.ts` | Mock `ethers`, test env var parsing and JWT middleware | Fast |
+| Unit | `test/flareConsumer.test.ts`, `test/jwtAuth.test.ts` | Mock `ethers`; test the Hono middleware via a minimal Hono app using `app.request()` | Fast |
 | Integration | `test/flareConsumer.integration.test.ts` | Connect to real Coston2 RPC, test `FlareConsumer` methods against live blockchain | Slow |
-| E2E | `test/server.integration.test.ts` | Spin up Express app, test full HTTP request/response cycle with `supertest` | Slow |
+| E2E | `test/server.integration.test.ts` | Drive the Hono app directly with `app.request()`, test full request/response cycle | Slow |
+
+## Deployment
+
+```bash
+wrangler login
+wrangler secret put JWT_SECRET
+npm run deploy   # wrangler deploy
+```
+
+The Worker is published to a `*.workers.dev` URL. See `cloudflare-plan.md` for the full migration plan.
 
 ## Key Design Decisions
 
@@ -83,3 +102,5 @@ Consumer Agent → Nevermined Proxy → Express API (server.ts) → FlareConsume
 - **Network-aware**: `ContractRegistry` address resolved per chain ID, not hardcoded
 - **Coston2-first**: integration/E2E tests target Coston2 testnet (free, no real funds at risk)
 - **Algorithm-restricted JWT**: `jwtVerify` enforces `HS256` only, preventing algorithm confusion attacks
+- **Hono over Express**: Workers do not support Node's `node:http` server; Hono provides Express-like routing on the edge runtime
+- **`nodejs_compat`**: required so `ethers` can use Node `crypto` primitives inside workerd

@@ -98,17 +98,9 @@ if (!rpcUrl) {
         ).rejects.toThrow();
       });
 
-      it("should throw when FLARE_RPC_URL is missing", () => {
-        const original = process.env.FLARE_RPC_URL;
-        delete process.env.FLARE_RPC_URL;
-        delete process.env.TEST_RPC_URL;
-        try {
-          const c = createConsumer();
-          expect(c).toBeDefined();
-        } finally {
-          if (original) process.env.FLARE_RPC_URL = original;
-          process.env.TEST_RPC_URL = original ? process.env.TEST_RPC_URL : "";
-        }
+      it("should build a consumer with defaults when no args are given", () => {
+        const c = createConsumer();
+        expect(c).toBeDefined();
       });
     });
   });
