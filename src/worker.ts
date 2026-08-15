@@ -3,6 +3,13 @@ import { cors } from "hono/cors";
 import { SignJWT } from "jose";
 import { createConsumer, type FlareConsumer } from "./flareConsumer.js";
 import { requireJwt, type JwtPayload } from "./jwtAuth.js";
+import {
+  decodeX402Token,
+  buildPaymentRequired,
+  getNvmBackend,
+  verifyX402Token,
+} from "./x402.js";
+import { isRateLimited } from "./rateLimiter.js";
 
 export interface Env {
   FLARE_RPC_URL?: string;
@@ -10,6 +17,10 @@ export interface Env {
   JWT_SECRET: string;
   NODE_ENV?: string;
   NEVERMINED_PAYMENT_CHAIN?: string;
+  NVM_API_KEY?: string;
+  CORS_ORIGIN?: string;
+  RATE_LIMIT_MAX?: string;
+  RATE_LIMIT_WINDOW_SECONDS?: string;
 }
 
 type AppEnv = {
@@ -26,26 +37,28 @@ function getConsumer(env: Env): FlareConsumer {
   return consumer;
 }
 
-function decodeX402Token(token: string): Record<string, unknown> | null {
-  try {
-    const base64 = token
-      .replace(/-/g, "+")
-      .replace(/_/g, "/")
-      .padEnd(token.length + ((4 - (token.length % 4)) % 4), "=");
-    const binary = atob(base64);
-    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-    return JSON.parse(new TextDecoder().decode(bytes));
-  } catch {
-    return null;
-  }
-}
-
 const app = new Hono<AppEnv>();
 
-app.use("*", cors());
+app.use("*", (c, next) => {
+  const origin = c.env?.CORS_ORIGIN;
+  if (origin) {
+    return cors({ origin })(c, next);
+  }
+  return cors()(c, next);
+});
 
 app.post("/api/v1/x402/exchange", async (c) => {
   try {
+    if (isRateLimited(c.env, c.req.raw.headers)) {
+      return c.json(
+        {
+          success: false,
+          error: "Rate limit exceeded",
+        },
+        429,
+      );
+    }
+
     const authHeader = c.req.header("authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return c.json(
@@ -67,7 +80,14 @@ app.post("/api/v1/x402/exchange", async (c) => {
       }, 401);
     }
 
-    const accepted = decoded.accepted as Record<string, unknown> | undefined;
+    const accepted = decoded.accepted as
+      | {
+          planId?: string;
+          network?: string;
+          scheme?: string;
+          extra?: { agentId?: string; httpVerb?: string };
+        }
+      | undefined;
     if (!accepted) {
       return c.json({
         success: false,
@@ -83,6 +103,36 @@ app.post("/api/v1/x402/exchange", async (c) => {
       return c.json({
         success: false,
         error: "Invalid x402 token: missing planId",
+      }, 401);
+    }
+
+    const nvmApiKey = c.env.NVM_API_KEY;
+    if (!nvmApiKey) {
+      return c.json({
+        success: false,
+        error: "x402 verification unavailable: NVM_API_KEY not configured",
+      }, 500);
+    }
+
+    const paymentRequired = buildPaymentRequired(planId, {
+      agentId,
+      httpVerb: "GET",
+      endpoint: "/api/v1/feed",
+      network: accepted.network,
+      scheme: accepted.scheme,
+    });
+
+    const verification = await verifyX402Token({
+      backend: getNvmBackend(nvmApiKey),
+      nvmApiKey,
+      x402AccessToken: x402Token,
+      paymentRequired,
+    });
+
+    if (!verification.isValid) {
+      return c.json({
+        success: false,
+        error: `Invalid x402 token: payment verification failed${verification.invalidReason ? ` (${verification.invalidReason})` : ""}`,
       }, 401);
     }
 
@@ -103,7 +153,18 @@ app.post("/api/v1/x402/exchange", async (c) => {
   }
 });
 
-app.get("/api/v1/feed", requireJwt, async (c) => {
+app.get("/api/v1/feed", (c, next) => {
+  if (isRateLimited(c.env, c.req.raw.headers)) {
+    return c.json(
+      {
+        success: false,
+        error: "Rate limit exceeded",
+      },
+      429,
+    );
+  }
+  return requireJwt(c, next);
+}, async (c) => {
   try {
     const data = await getConsumer(c.env).getOracleData();
     return c.json({ success: true, data });

@@ -29,7 +29,7 @@ Consumer Agent → Nevermined Proxy → Hono Worker (worker.ts) → FlareConsume
 - Cloudflare Worker entry point built on [Hono](https://hono.dev)
 - Three endpoints: `GET /api/v1/feed` (JWT-gated), `POST /api/v1/x402/exchange` (public), `GET /health` (public)
 - `/api/v1/feed` calls `FlareConsumer.getOracleData()` and returns `{ success: true, data: OracleResponse }`
-- `/api/v1/x402/exchange` decodes the base64url x402 token, extracts `accepted.planId` / `accepted.extra.agentId`, and issues a time-bound (1h) JWT
+- `/api/v1/x402/exchange` decodes the base64url x402 token, reconstructs the `paymentRequired` payload, verifies it against the Nevermined backend `/api/v1/x402/verify` (`src/x402.ts`), and — only on `isValid` — issues a time-bound (1h) JWT carrying `sub` = `accepted.extra.agentId`, `planId`, `x402Version`
 - `/health` returns `{ status: "ok", timestamp }` for liveness checks
 - CORS enabled via `hono/cors`
 - Configuration comes from Worker bindings (`env`), not `process.env`

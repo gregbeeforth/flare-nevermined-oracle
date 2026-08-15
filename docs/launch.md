@@ -77,26 +77,37 @@ The proxy will:
 
 ## Step 5: Harden Before Production
 
-The Worker is directly reachable at its `*.workers.dev` URL, so the endpoints must be hardened before going live. **These are code-level requirements, not just configuration.**
+The Worker is directly reachable at its `*.workers.dev` URL, so the endpoints must be hardened before going live. The code-level hardening below is already implemented; the remaining items are configuration.
 
-### 5a. Verify x402 token signatures
+### 5a. x402 token verification (implemented)
 
-`POST /api/v1/x402/exchange` currently trusts the x402 token's decoded `planId`/`agentId` without verifying a signature (`src/worker.ts` `decodeX402Token`). **Anyone can forge a token and obtain a free 1-hour JWT**, bypassing payment. Before production you must either:
+`POST /api/v1/x402/exchange` no longer trusts the decoded x402 claims blindly. It calls the Nevermined backend `/api/v1/x402/verify` endpoint (`src/x402.ts` `verifyX402Token`) and only mints a JWT when the backend confirms `isValid`. The backend URL is derived from the `NVM_API_KEY` prefix (`sandbox:` → `api.sandbox.nevermined.app`, `live:` → `api.live.nevermined.app`).
 
-- **Verify the x402 token** against the Nevermined proxy (recommended), so only tokens issued after a real payment are accepted, or
-- **Disable the exchange endpoint** and let the Nevermined proxy mint JWTs itself, restricting `/api/v1/x402/exchange` to the proxy's IP/network via a Cloudflare rule.
+- Requires `NVM_API_KEY` to be set on the Worker. If missing, the endpoint returns `500` (`x402 verification unavailable`).
+- `paymentRequired` is reconstructed from the token's `planId`, `agentId`, `httpVerb` (`GET`) and resource `/api/v1/feed`, matching the subscriber's payment intent.
 
-### 5b. Restrict CORS
+### 5b. Restrict CORS (implemented)
 
-`app.use("*", cors())` currently allows all origins (`src/worker.ts:45`). Change it to restrict to your production domain:
+`src/worker.ts` now applies `cors({ origin: CORS_ORIGIN })` when the `CORS_ORIGIN` binding is set. Set it to your production domain, e.g. in `wrangler.toml`:
 
-```ts
-app.use("*", cors({ origin: "https://your-production-domain.com" }));
+```toml
+[vars]
+CORS_ORIGIN = "https://your-production-domain.com"
 ```
 
-### 5c. Add rate limiting
+When `CORS_ORIGIN` is unset the Worker keeps the permissive `cors()` default, so **set it before going live**.
 
-There is no rate limiting in the code. Either add a rate-limiting middleware to the Worker or create a Cloudflare [rate limiting rule](https://developers.cloudflare.com/rate-limiting/) on the Worker route to protect `/api/v1/feed`.
+### 5c. Add rate limiting (implemented)
+
+A sliding-window rate limiter keyed by client IP (`cf-connecting-ip`) is wired into `/api/v1/x402/exchange` and `/api/v1/feed` (`src/rateLimiter.ts`). Configure via bindings:
+
+```toml
+[vars]
+RATE_LIMIT_MAX = "100"
+RATE_LIMIT_WINDOW_SECONDS = "60"
+```
+
+Defaults: 100 requests / 60 seconds. The in-memory limiter is per-isolate; for strict global limits add a Cloudflare [rate limiting rule](https://developers.cloudflare.com/rate-limiting/) as well.
 
 ### 5d. Use live Nevermined credentials
 
@@ -125,9 +136,9 @@ See [Testing](testing.md) for the detailed manual flow (crypto and fiat payment 
 - [ ] `NODE_ENV=production` is set
 - [ ] Secrets are set via `wrangler secret put` (`JWT_SECRET`, `NVM_API_KEY`, `NEVERMINED_APP_ID`, `NEVERMINED_APP_SECRET`, `RECEIVER_ADDRESS`)
 - [ ] Worker is deployed with `npm run deploy` and reachable at its `*.workers.dev` URL
-- [ ] x402 token signature verification is implemented or the exchange endpoint is proxy-restricted (Step 5a)
-- [ ] CORS is restricted to your production domain (Step 5b)
-- [ ] Rate limiting is configured on the Worker (Step 5c)
+- [ ] `NVM_API_KEY` secret is set on the Worker (required for x402 verification, Step 5a)
+- [ ] `CORS_ORIGIN` is set to your production domain (Step 5b)
+- [ ] `RATE_LIMIT_MAX`/`RATE_LIMIT_WINDOW_SECONDS` are set (Step 5c)
 - [ ] `NVM_API_KEY` uses the `live:` prefix and `.env` has the new `NVM_AGENT_ID`/`NVM_PLAN_ID` from the production publish (Step 5d)
 - [ ] `API_ENDPOINT` in `.env` points to your production Worker URL
 - [ ] Monitoring and alerting are set up for `/health`

@@ -45,10 +45,10 @@ run_test() {
     fi
     echo "x402 token obtained from Nevermined (${#X402_TOKEN} chars)"
   else
-    echo "! NVM_API_KEY / NVM_PLAN_ID / NVM_AGENT_ID missing"
-    echo "! Fabricating a local x402 token (the exchange endpoint does not verify signatures)"
-    X402_TOKEN=$(node -e "console.log(Buffer.from(JSON.stringify({x402Version:'1.0',accepted:{planId:'test-plan',extra:{agentId:'e2e-worker'}}})).toString('base64url'))")
-    EXPECT_SUB="e2e-worker"
+    echo "ERROR: NVM_API_KEY / NVM_PLAN_ID / NVM_AGENT_ID missing"
+    echo "! The exchange endpoint now verifies x402 tokens against the Nevermined backend."
+    echo "! Set NVM_API_KEY, NVM_PLAN_ID and NVM_AGENT_ID in .env to run the payment flow."
+    return 1
   fi
   echo ""
 

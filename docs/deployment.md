@@ -64,15 +64,19 @@ X402_TOKEN=$(NVM_API_KEY="$NVM_API_KEY" NVM_PLAN_ID="$NVM_PLAN_ID" NVM_AGENT_ID=
 echo "${#X402_TOKEN} chars"   # a ~202-char base64url blob
 ```
 
-**2. Exchange it for a short-lived JWT.** POST it as a Bearer token to `/api/v1/x402/exchange`. The handler `decodeX402Token()` (src/worker.ts:29) base64url-decodes the token — **no signature check** — then requires an `accepted.planId` claim and signs a fresh 1h HS256 JWT (payload: `sub` = `accepted.extra.agentId`, `planId`, `x402Version`) with `JWT_SECRET`:
+**2. Exchange it for a short-lived JWT.** POST it as a Bearer token to `/api/v1/x402/exchange`. The handler base64url-decodes the token, reconstructs the `paymentRequired` payload (`planId`, `agentId`, resource `/api/v1/feed`), and calls the Nevermined backend `/api/v1/x402/verify` (`src/x402.ts`) using `NVM_API_KEY`. Only when the backend confirms `isValid` does it sign a fresh 1h HS256 JWT (payload: `sub` = `accepted.extra.agentId`, `planId`, `x402Version`) with `JWT_SECRET`:
 
 ```bash
 curl -s -X POST http://localhost:8787/api/v1/x402/exchange \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $X402_TOKEN"
 # → { "success": true, "token": "<1h HS256 JWT>" }
-# Missing/malformed auth header, bad base64, or missing accepted.planId → 401
+# Missing/malformed auth header, bad base64, missing accepted.planId,
+# or failed payment verification → 401
+# Missing NVM_API_KEY on the worker → 500
 ```
+
+> Local dev needs `NVM_API_KEY` configured for the worker (`NVM_API_KEY=... npx wrangler dev`, or in `.dev.vars`). Because verification is enforced, fabricating a token no longer works — the exchange step requires a real Nevermined-issued x402 token.
 
 **3. Query the feed with the returned JWT:**
 
@@ -81,15 +85,6 @@ JWT=$(curl -s -X POST http://localhost:8787/api/v1/x402/exchange \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $X402_TOKEN" | jq -r '.token')
 curl -s -H "Authorization: Bearer $JWT" http://localhost:8787/api/v1/feed | python3 -m json.tool
-```
-
-**Local shortcut (no live Nevermined token needed):** because the exchange step only base64-decodes and checks for `accepted.planId`, you can fabricate a token locally to exercise the full chain without a delegation or payment:
-
-```bash
-FAKE=$(node -e "console.log(Buffer.from(JSON.stringify({x402Version:'1.0',accepted:{planId:'test-plan',extra:{agentId:'test-agent'}}})).toString('base64url'))")
-curl -s -X POST http://localhost:8787/api/v1/x402/exchange \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $FAKE" | jq -r '.token'
 ```
 
 ## Configuration
@@ -218,7 +213,7 @@ npx wrangler rollback
 | Feed returns 401 with a valid token | `JWT_SECRET` differs between mint and worker | Re-put the same secret |
 | `Unsupported chain ID` | `FLARE_RPC_URL` on an unsupported network (only 14, 114, 19, 16) | Point `FLARE_RPC_URL` at Flare/Coston2/Songbird/Coston |
 | Feed values are zero | Wrong `FTSO_FEED_IDS` for the network | Use correct bytes21 feed IDs for mainnet vs Coston2 |
-| x402 exchange returns 401/500 | Invalid/expired x402 token or missing `JWT_SECRET` | Re-obtain the token; verify secret |
+| x402 exchange returns 401/500 | Invalid/expired x402 token, failed payment verification, or missing `NVM_API_KEY`/`JWT_SECRET` | Re-obtain the token; set `NVM_API_KEY` secret; verify secret |
 | `wrangler deploy` fails on bundling `crypto` | `ethers` Node `crypto` import | Ensure `compatibility_flags = ["nodejs_compat"]` is present |
 | First request is slow | Cold start (large `ethers` bundle) | Expected; `[observability]` is enabled, consider caching the feed response |
 | Cold start budget exceeded | Default Worker CPU/startup budget | Contact Cloudflare to raise `startup_timeout` (Workers paid plan) |
