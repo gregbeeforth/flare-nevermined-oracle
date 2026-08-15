@@ -7,7 +7,9 @@ const APP_ID = process.env.NEVERMINED_APP_ID || "";
 const PAYMENT_CHAIN = process.env.NEVERMINED_PAYMENT_CHAIN || "base";
 const RECEIVER_ADDRESS =
   process.env.RECEIVER_ADDRESS || "0x00000000000000000000000000000000000000";
-const API_ENDPOINT = process.env.API_ENDPOINT || "http://localhost:3000/api/v1/feed";
+const API_ENDPOINT =
+  process.env.API_ENDPOINT ||
+  "https://flare-nevermined-oracle.flare-oracle.workers.dev/api/v1/feed";
 
 async function main(): Promise<void> {
   if (!NVM_API_KEY) {

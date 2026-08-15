@@ -75,7 +75,36 @@ The proxy will:
 - Issue a time-bound JWT after successful payment verification
 - Forward validated requests to your Worker at `.../api/v1/feed`
 
-## Step 5: Verify the Payment Flow
+## Step 5: Harden Before Production
+
+The Worker is directly reachable at its `*.workers.dev` URL, so the endpoints must be hardened before going live. **These are code-level requirements, not just configuration.**
+
+### 5a. Verify x402 token signatures
+
+`POST /api/v1/x402/exchange` currently trusts the x402 token's decoded `planId`/`agentId` without verifying a signature (`src/worker.ts` `decodeX402Token`). **Anyone can forge a token and obtain a free 1-hour JWT**, bypassing payment. Before production you must either:
+
+- **Verify the x402 token** against the Nevermined proxy (recommended), so only tokens issued after a real payment are accepted, or
+- **Disable the exchange endpoint** and let the Nevermined proxy mint JWTs itself, restricting `/api/v1/x402/exchange` to the proxy's IP/network via a Cloudflare rule.
+
+### 5b. Restrict CORS
+
+`app.use("*", cors())` currently allows all origins (`src/worker.ts:45`). Change it to restrict to your production domain:
+
+```ts
+app.use("*", cors({ origin: "https://your-production-domain.com" }));
+```
+
+### 5c. Add rate limiting
+
+There is no rate limiting in the code. Either add a rate-limiting middleware to the Worker or create a Cloudflare [rate limiting rule](https://developers.cloudflare.com/rate-limiting/) on the Worker route to protect `/api/v1/feed`.
+
+### 5d. Use live Nevermined credentials
+
+- Switch `NVM_API_KEY` from the `sandbox:` prefix to your **`live:`** production key.
+- Re-run `npm run publish-asset` with live credentials — this **creates new `NVM_AGENT_ID`/`NVM_PLAN_ID`**. Replace the sandbox IDs in `.env` and re-point the Nevermined proxy to the same Worker.
+- Set `API_ENDPOINT` in `.env` to your production Worker URL (e.g. `https://flare-nevermined-oracle.flare-oracle.workers.dev/api/v1/feed`). `scripts/publishAsset.ts` defaults to the stale `http://localhost:3000/api/v1/feed`, which is wrong for production.
+
+## Step 6: Verify the Payment Flow
 
 Run the E2E script, which exercises the full purchase → x402 token → JWT → feed flow:
 
@@ -96,9 +125,12 @@ See [Testing](testing.md) for the detailed manual flow (crypto and fiat payment 
 - [ ] `NODE_ENV=production` is set
 - [ ] Secrets are set via `wrangler secret put` (`JWT_SECRET`, `NVM_API_KEY`, `NEVERMINED_APP_ID`, `NEVERMINED_APP_SECRET`, `RECEIVER_ADDRESS`)
 - [ ] Worker is deployed with `npm run deploy` and reachable at its `*.workers.dev` URL
-- [ ] CORS is configured for your production domain
+- [ ] x402 token signature verification is implemented or the exchange endpoint is proxy-restricted (Step 5a)
+- [ ] CORS is restricted to your production domain (Step 5b)
+- [ ] Rate limiting is configured on the Worker (Step 5c)
+- [ ] `NVM_API_KEY` uses the `live:` prefix and `.env` has the new `NVM_AGENT_ID`/`NVM_PLAN_ID` from the production publish (Step 5d)
+- [ ] `API_ENDPOINT` in `.env` points to your production Worker URL
 - [ ] Monitoring and alerting are set up for `/health`
-- [ ] Rate limiting is configured on the Worker
 - [ ] `npm run publish-asset` has been run with production credentials
 
 ## Monitor and Maintain
