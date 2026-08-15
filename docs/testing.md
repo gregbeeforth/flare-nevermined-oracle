@@ -71,6 +71,8 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:8787/api/v1/feed
 
 ### Phase 1: Local x402 Token Generation
 
+For a **fiat (Stripe) plan**, `get-x402-token.mjs` creates a card delegation using your enrolled Stripe card. **Prerequisite:** add a payment card in the [Nevermined App](https://nevermined.app) (Settings → Payment methods). For a crypto plan it uses an erc4337 USDC delegation instead.
+
 | # | Step | Command | Expected Result |
 |---|------|---------|-----------------|
 | 1.1 | Generate x402 token locally | `NVM_API_KEY=... NVM_PLAN_ID=... NVM_AGENT_ID=... node get-x402-token.mjs` | Outputs a long base64url string (the x402 access token) |

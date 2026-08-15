@@ -57,11 +57,14 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:8787/api/v1/feed
 
 ### Local x402 → JWT → feed flow
 
-**1. Obtain an x402 token.** `get-x402-token.mjs` reads `NVM_API_KEY`, `NVM_PLAN_ID`, and `NVM_AGENT_ID` from `.env` (via `dotenv`), creates a 7-day erc4337 delegation (USDC, $100 spending limit) with Nevermined, then fetches a real x402 access token and prints it to stdout:
+**1. Obtain an x402 token.** `get-x402-token.mjs` reads `NVM_API_KEY`, `NVM_PLAN_ID`, and `NVM_AGENT_ID` from `.env` (via `dotenv`), then fetches a real x402 access token and prints it to stdout. The script inspects the plan's `x402Scheme` and uses the matching delegation flow:
+
+- **`nvm:card-delegation` (fiat/Stripe plan):** creates a 7-day Stripe card delegation (USD, $100 spending limit) using your enrolled card, then requests the token with the `nvm:card-delegation` scheme. **Prerequisite:** add a payment card in the [Nevermined App](https://nevermined.app) (Settings → Payment methods) so the script can find an `Active` Stripe card.
+- **`nvm:erc4337` (crypto plan):** creates a 7-day erc4337 delegation (USDC, $100 spending limit) and requests the token with the default scheme.
 
 ```bash
 X402_TOKEN=$(NVM_API_KEY="$NVM_API_KEY" NVM_PLAN_ID="$NVM_PLAN_ID" NVM_AGENT_ID="$NVM_AGENT_ID" node get-x402-token.mjs)
-echo "${#X402_TOKEN} chars"   # a ~202-char base64url blob
+echo "${#X402_TOKEN} chars"   # a base64url blob
 ```
 
 **2. Exchange it for a short-lived JWT.** POST it as a Bearer token to `/api/v1/x402/exchange`. The handler base64url-decodes the token, reconstructs the `paymentRequired` payload (`planId`, `agentId`, resource `/api/v1/feed`), and calls the Nevermined backend `/api/v1/x402/verify` (`src/x402.ts`) using `NVM_API_KEY`. Only when the backend confirms `isValid` does it sign a fresh 1h HS256 JWT (payload: `sub` = `accepted.extra.agentId`, `planId`, `x402Version`) with `JWT_SECRET`:
