@@ -73,6 +73,8 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:8787/api/v1/feed
 
 For a **fiat (Stripe) plan**, `get-x402-token.mjs` creates a card delegation using your enrolled Stripe card. **Prerequisite:** add a payment card in the [Nevermined App](https://nevermined.app) (Settings → Payment methods). For a crypto plan it uses an erc4337 USDC delegation instead.
 
+> The card must belong to a **subscriber** account — the account that *pays* the agent's plan. A publisher agent's Stripe account only *receives* payments and cannot mint a token for its own plan. To exercise the purchase flow, create a separate Nevermined account, add a card, subscribe to the agent's plan, and use that account's `NVM_API_KEY` (via `NVM_SUBSCRIBER_API_KEY` or by swapping it into `.env`).
+
 | # | Step | Command | Expected Result |
 |---|------|---------|-----------------|
 | 1.1 | Generate x402 token locally | `NVM_API_KEY=... NVM_PLAN_ID=... NVM_AGENT_ID=... node get-x402-token.mjs` | Outputs a long base64url string (the x402 access token) |

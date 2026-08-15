@@ -123,26 +123,28 @@ Run the E2E script, which exercises the full purchase → x402 token → JWT →
 ./test-e2e-worker.sh
 ```
 
+> The purchase leg requires a **subscriber** account with a payment card that subscribes to your agent's plan. A publisher's Stripe account only receives payments. Until a real (or test) subscriber exists, the production wiring is verified but the paid purchase step cannot be exercised end-to-end.
+
 See [Testing](testing.md) for the detailed manual flow (crypto and fiat payment paths).
 
 ## Production Checklist
 
-- [ ] `FLARE_RPC_URL` points to mainnet Flare RPC (not Coston2)
-- [ ] `FTSO_FEED_IDS` uses mainnet feed IDs
-- [ ] `NEVERMINED_APP_ID` and `NEVERMINED_APP_SECRET` are production credentials
-- [ ] `NEVERMINED_PAYMENT_CHAIN` is set to the production chain (e.g., `base`)
-- [ ] `RECEIVER_ADDRESS` is your production wallet address
-- [ ] `JWT_SECRET` is a strong, unique secret (not `test-jwt-secret`)
-- [ ] `NODE_ENV=production` is set
-- [ ] Secrets are set via `wrangler secret put` (`JWT_SECRET`, `NVM_API_KEY`, `NEVERMINED_APP_ID`, `NEVERMINED_APP_SECRET`, `RECEIVER_ADDRESS`)
-- [ ] Worker is deployed with `npm run deploy` and reachable at its `*.workers.dev` URL
-- [ ] `NVM_API_KEY` secret is set on the Worker (required for x402 verification, Step 5a)
+- [x] `FLARE_RPC_URL` points to mainnet Flare RPC (not Coston2)
+- [x] `FTSO_FEED_IDS` uses mainnet feed IDs
+- [x] `NEVERMINED_PAYMENT_CHAIN` is set to the production chain (e.g., `base`)
+- [x] `JWT_SECRET` is a strong, unique secret (not `test-jwt-secret`)
+- [x] `NODE_ENV=production` is set
+- [x] Secrets are set via `wrangler secret put` (`JWT_SECRET`, `NVM_API_KEY`, `RECEIVER_ADDRESS`)
+- [x] Worker is deployed with `npm run deploy` and reachable at its `*.workers.dev` URL
+- [x] `NVM_API_KEY` secret is set on the Worker and uses the `live:` prefix (verifies against `api.live.nevermined.app`)
+- [x] `.env` has the production `NVM_AGENT_ID`/`NVM_PLAN_ID`
+- [x] `API_ENDPOINT` in `.env` points to your production Worker URL
+- [ ] `RECEIVER_ADDRESS` confirmed as your production wallet
 - [ ] `CORS_ORIGIN` is set to your production domain (Step 5b)
 - [ ] `RATE_LIMIT_MAX`/`RATE_LIMIT_WINDOW_SECONDS` are set (Step 5c)
-- [ ] `NVM_API_KEY` uses the `live:` prefix and `.env` has the new `NVM_AGENT_ID`/`NVM_PLAN_ID` from the production publish (Step 5d)
-- [ ] `API_ENDPOINT` in `.env` points to your production Worker URL
+- [ ] `NEVERMINED_APP_ID`/`NEVERMINED_APP_SECRET` set as Worker secrets (only needed for `publish-asset`)
+- [ ] Paid purchase flow verified with a real or test subscriber (Step 6)
 - [ ] Monitoring and alerting are set up for `/health`
-- [ ] `npm run publish-asset` has been run with production credentials
 
 ## Monitor and Maintain
 
