@@ -1,6 +1,8 @@
-# Future Use Cases — flare-nevermined-oracle
+# Roadmap — flare-nevermined-oracle
 
-## Easy Additions (leverage existing code)
+Planned and potential improvements, roughly ordered by effort.
+
+## Easy Additions
 
 ### 1. Individual Feed Lookup Endpoint
 
@@ -52,19 +54,37 @@ Accept a `chainId` query parameter to resolve `ContractRegistry` addresses for d
 
 **Effort:** Medium — the `ContractRegistry` address resolution is already network-aware; just expose the chain ID selection via query params.
 
+### 9. Retry Logic for RPC Calls
+
+Public Coston2 RPC endpoints can rate-limit or temporarily go down. Retry logic with exponential backoff prevents transient failures from breaking tests and improves production reliability.
+
+**Effort:** Medium — add backoff-based retries to `FlareConsumer` RPC calls.
+
+### 10. `TestFtsoV2` Support in Tests
+
+Coston2 has a `TestFtsoV2` contract with all `view` methods and no fees, unlike mainnet `FtsoV2` which has gas costs. Using `TestFtsoV2` in tests is cheaper, faster, and avoids consuming gas on the testnet.
+
+**Effort:** Medium — add a test-only contract selector in `flareConsumer.ts`.
+
 ## Larger Additions
 
-### 9. WebSocket / SSE Streaming
+### 11. WebSocket / SSE Streaming
 
 Stream live feed updates to clients using Server-Sent Events, leveraging the ~1.8s block latency of Flare.
 
 **Effort:** Larger — add an SSE endpoint that polls `getOracleData()` on each new block and pushes updates to connected clients.
 
-### 10. Admin / Diagnostics Endpoint
+### 12. Admin / Diagnostics Endpoint
 
 `GET /admin/health` that checks RPC connectivity, feed freshness, and contract resolution status.
 
 **Effort:** Larger — add a new route that exercises `resolveFtsoV2Address()`, `getBlockHeight()`, and `getNetworkTimestamp()` and returns their status.
+
+## CI / Test Infrastructure
+
+- **Add `@integration` test tags** — isolate integration/E2E tests from unit tests in CI. Tagging lets CI run fast unit tests on every push and integration/E2E tests only on PRs or nightly builds.
+- **CI pipeline** — add `npm run test:integration` and `npm run test:e2e` to GitHub Actions with the Coston2 RPC URL as a secret.
+- **Nevermined `publish-asset` integration test** — mock or skip when `NVM_API_KEY` is missing so CI doesn't fail without real credentials.
 
 ## Design Notes
 

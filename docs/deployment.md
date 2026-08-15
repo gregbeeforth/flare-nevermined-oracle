@@ -1,100 +1,13 @@
-# Cloudflare Worker Deployment Plan — flare-nevermined-oracle
+# Deployment — flare-nevermined-oracle
 
-## Decisions
+The service runs as a stateless [Cloudflare Worker](https://developers.cloudflare.com/workers/). `npm run dev` starts a local `wrangler dev` instance; `npm run deploy` publishes to Workers.
 
-- **Routing**: Hono (edge-native) on Workers
-- **Dev/testing**: fully wrangler-based (`wrangler dev`; tests drive the Hono app via `app.request()`)
-- **Layout**: flat — `src/worker.ts` + root `wrangler.toml`; shared `src/` modules reused unchanged where possible
-
-## 1. Compatibility Analysis
-
-| Component | Status | Action |
-|---|---|---|
-| Routing / CORS | ✅ Edge-native | Hono + `hono/cors` |
-| `dotenv` | ⚠️ Node-only | Worker bindings (`[vars]` / secrets); kept for Node-side scripts |
-| `ethers` 6.17 | ⚠️ Main entry imports bare `crypto`, not `ws`; `JsonRpcProvider` uses global `fetch` | Enable `nodejs_compat` |
-| `jose` 5.10 | ✅ Edge-native (Web Crypto) | No change |
-| `@nevermined-io/payments` | ✅ Scripts only (`publishAsset.ts`, token scripts), not in runtime | No change |
-| `Buffer.from(..., "base64url")` in `decodeX402Token` | ⚠️ Node API | Rewritten with `atob` + base64url → base64 mapping |
-| `process.env` reads | ⚠️ `process` not available | Read from `env` binding passed by the fetch handler |
-
-## 2. Target Architecture
-
-```
-Consumer Agent → Nevermined Proxy → Cloudflare Worker (Hono) → FlareConsumer (ethers) → Flare RPC
-                                        ↑
-                                  JWT auth (jose, HS256)
-```
-
-Single Worker entry `src/worker.ts` exposing a Hono app. Same three routes:
-
-- `POST /api/v1/x402/exchange` — decode x402 token, issue time-bound JWT (1h)
-- `GET /api/v1/feed` — JWT-gated FTSO data
-- `GET /health` — public liveness check
-
-## 3. File Changes
-
-**New files**
-- `wrangler.toml` — name, `main = "src/worker.ts"`, compatibility date, `compatibility_flags = ["nodejs_compat"]`, `[vars]`, `[observability]`
-- `src/worker.ts` — Hono app: three routes, `hono/cors`, lazy singleton consumer, `env`-based config
-- `tsconfig.worker.json` — Worker-typed TS config (`@cloudflare/workers-types`, bundler resolution, `noEmit`)
-
-**Modified files**
-- `src/jwtAuth.ts` — Hono middleware (`Context`/`Next`); `algorithms: ["HS256"]` restriction; secret passed via `c.env.JWT_SECRET`
-- `src/flareConsumer.ts` — `createConsumer(rpcUrl, feedIdsRaw)` accepts explicit args (no `process.env`)
-- `package.json` — `hono`, `wrangler`, `@cloudflare/workers-types`; scripts: `dev: wrangler dev`, `deploy: wrangler deploy`, `typecheck`, `typecheck:worker`
-- Tests — `test/server.integration.test.ts` drives `app.request()`; `test/jwtAuth.test.ts` tests the Hono middleware via a minimal Hono app
-- `README.md` / `architecture.md` — document the Worker deploy path
-
-**Deleted**
-- `src/server.ts` (superseded by `src/worker.ts`), the old container deployment files, and `test-e2e.sh` — all removed in favor of Workers
-
-## 4. Environment Variable → Binding Mapping
-
-| Current `.env` | Binding type | Notes |
-|---|---|---|
-| `FLARE_RPC_URL` | `[vars]` | |
-| `FTSO_FEED_IDS` | `[vars]` | |
-| `NODE_ENV` | `[vars]` | |
-| `NEVERMINED_PAYMENT_CHAIN` | `[vars]` | |
-| `JWT_SECRET` | secret | `wrangler secret put JWT_SECRET` |
-| `NVM_API_KEY` | secret | |
-| `NEVERMINED_APP_ID` | secret | |
-| `NEVERMINED_APP_SECRET` | secret | |
-| `RECEIVER_ADDRESS` | secret | |
-| `PORT` | removed | Workers have no port |
-
-## 5. Implementation Steps
-
-1. Install tooling: `hono`, `wrangler`, `@cloudflare/workers-types`
-2. Write `wrangler.toml`, `tsconfig.worker.json`
-3. Write `src/worker.ts` (Hono app, three routes, cors, lazy singleton consumer, env plumbing, base64url decode)
-4. Write `src/jwtAuth.ts` as Hono middleware
-5. Make `src/flareConsumer.ts` `createConsumer` arg-based
-6. Update `package.json` scripts
-7. Rework `test/jwtAuth.test.ts` and `test/server.integration.test.ts` to `app.request()`
-8. Verify: `npm run typecheck`, `npm run typecheck:worker`, `npm test`, `wrangler deploy --dry-run` (bundles)
-9. Local run: `npm run dev` → verify `/health`, x402 exchange, feed with JWT
-10. Deploy: `wrangler login`, `wrangler secret put` for each secret, `wrangler deploy`; verify `*.workers.dev`
-11. Point the Nevermined proxy at the worker URL; re-run E2E checks from `nevermined_E2E.md`
-12. Update `README.md` and `architecture.md`
-
-## 6. Risks / Notes
-
-- `ethers` bundle is large (~2 MB) → modest cold start; acceptable for this low-traffic, stateless service
-- Keep a singleton `FlareConsumer` per isolate (matches current design; avoids creating a provider per request)
-- `wrangler deploy` requires Node ≥ 18 (repo uses Node 20+) and a logged-in Cloudflare account
-- If bundling fails on bare `crypto`, add esbuild externals / `main_fields` config (unlikely with `nodejs_compat`)
-- Optional follow-ups: custom domain, `[routes]`, rate limiting, cache headers on the feed endpoint
-
-## 7. Detailed Deployment Guide
-
-### 7.1 Prerequisites
+## Prerequisites
 
 | Requirement | Check |
 |---|---|
 | Node.js ≥ 18 (repo uses 20+) | `node --version` |
-| `wrangler` installed | `npx wrangler --version` (installed as devDependency) |
+| `wrangler` installed | `npx wrangler --version` (devDependency) |
 | Cloudflare account | Sign up at https://dash.cloudflare.com |
 | Dependencies installed | `npm install` |
 
@@ -110,7 +23,7 @@ npx wrangler deploy --dry-run   # bundles without deploying
 
 Expected dry-run output shows the bundle size and the `[vars]` bindings.
 
-### 7.2 Local Development (wrangler dev)
+## Local Development (wrangler dev)
 
 Runs the Worker locally using the `[vars]` from `wrangler.toml`. Secrets are NOT available in local dev unless you provide them:
 
@@ -126,7 +39,7 @@ curl http://localhost:8787/health                 # {"status":"ok","timestamp":"
 curl -i http://localhost:8787/api/v1/feed         # 401 (no JWT)
 ```
 
-To exercise JWT-gated `/api/v1/feed` locally, provide `JWT_SECRET` and mint a token:
+To exercise the JWT-gated `/api/v1/feed` locally, provide `JWT_SECRET` and mint a token:
 
 ```bash
 JWT_SECRET=dev-secret npx wrangler dev &
@@ -142,7 +55,7 @@ new SignJWT({sub:'test'})
 curl -H "Authorization: Bearer $TOKEN" http://localhost:8787/api/v1/feed
 ```
 
-For a full local x402 → JWT → feed flow (mirrors `test-e2e-worker.sh` but against `localhost`), with `wrangler dev` running and `JWT_SECRET` set:
+### Local x402 → JWT → feed flow
 
 **1. Obtain an x402 token.** `get-x402-token.mjs` reads `NVM_API_KEY`, `NVM_PLAN_ID`, and `NVM_AGENT_ID` from `.env` (via `dotenv`), creates a 7-day erc4337 delegation (USDC, $100 spending limit) with Nevermined, then fetches a real x402 access token and prints it to stdout:
 
@@ -179,18 +92,11 @@ curl -s -X POST http://localhost:8787/api/v1/x402/exchange \
   -H "Authorization: Bearer $FAKE" | jq -r '.token'
 ```
 
-### 7.3 Authenticate with Cloudflare
-
-```bash
-npx wrangler login
-npx wrangler whoami   # confirm the authenticated account
-```
-
-### 7.4 Set Environment Variables
+## Configuration
 
 Two kinds of configuration:
 
-**Plain variables** — already declared under `[vars]` in `wrangler.toml`. Edit the file and redeploy to change them. Never commit real secrets here.
+**Plain variables** — declared under `[vars]` in `wrangler.toml`. Edit the file and redeploy to change them. Never commit real secrets here.
 
 | `[vars]` key | Example value |
 |---|---|
@@ -213,7 +119,18 @@ Each command prompts for the value on stdin (or pipe it: `echo "$VALUE" | npx wr
 
 > ⚠️ The same `JWT_SECRET` must be used wherever JWTs are validated. If you rotate it, all outstanding JWTs become invalid.
 
-### 7.5 Deploy
+There is no `PORT` — Workers have no listening port.
+
+## Deploy
+
+### Authenticate with Cloudflare
+
+```bash
+npx wrangler login
+npx wrangler whoami   # confirm the authenticated account
+```
+
+### Deploy
 
 ```bash
 npx wrangler deploy            # or: npm run deploy
@@ -227,7 +144,7 @@ Deployed flare-nevermined-oracle
 https://flare-nevermined-oracle.<your-subdomain>.workers.dev
 ```
 
-### 7.6 Verify the Deployment
+### Verify the Deployment
 
 ```bash
 # Health (public)
@@ -254,21 +171,13 @@ curl -s -X POST https://flare-nevermined-oracle.<your-subdomain>.workers.dev/api
   -H "Authorization: Bearer invalid_x402_token"
 ```
 
-Run the full E2E script once the worker URL is live (see 7.7).
+Run the full E2E script once the worker URL is live:
 
-### 7.7 Wire Up the Nevermined Proxy and E2E
+```bash
+./test-e2e-worker.sh
+```
 
-1. In the [Nevermined dashboard](https://nevermined.app) → **Agents** → your Flare FTSO Oracle Feed agent → **Settings**, set the **proxy URL** to the deployed worker URL:
-   ```
-   https://flare-nevermined-oracle.<your-subdomain>.workers.dev
-   ```
-2. Point `test-e2e-worker.sh` at the worker URL (`REMOTE_URL=...`) or use the default, then run:
-   ```bash
-   ./test-e2e-worker.sh
-   ```
-   This exercises the full purchase → x402 token → JWT → feed flow end to end.
-
-### 7.8 Custom Domain and Routes (optional)
+## Custom Domain and Routes (optional)
 
 By default the worker is served from `*.workers.dev`. To serve it on a domain you control (requires a Cloudflare-managed zone):
 
@@ -281,7 +190,7 @@ routes = [
 
 then `npx wrangler deploy` again. Alternatively add a Custom Domain via the Cloudflare dashboard (Workers → your worker → Settings → Domains & Routes). Cloudflare issues/attaches HTTPS automatically.
 
-### 7.9 Managing the Deployment
+## Managing the Deployment
 
 **View logs** (requires the deployed worker to have observability enabled — see `[observability]` in `wrangler.toml`):
 
@@ -301,18 +210,7 @@ npx wrangler rollback
 **Update plain vars**: edit `wrangler.toml` → `npx wrangler deploy`.
 **Update secrets**: `npx wrangler secret put <NAME>` → redeploy is triggered automatically.
 
-### 7.10 Production Checklist
-
-- [ ] `FLARE_RPC_URL` points to **mainnet** (`https://flare-api.flare.network/ext/C/rpc`), not Coston2
-- [ ] `FTSO_FEED_IDS` uses **mainnet** feed IDs (bytes21, 42 hex chars)
-- [ ] `JWT_SECRET` is a strong, unique secret
-- [ ] Secrets (`NVM_API_KEY`, `NEVERMINED_APP_ID`, `NEVERMINED_APP_SECRET`, `RECEIVER_ADDRESS`) use live (`live:`) credentials
-- [ ] `NODE_ENV` is `production`
-- [ ] Nevermined agent proxy URL points at the worker URL
-- [ ] CORS origins match your consumer domains (edit `cors()` in `src/worker.ts`)
-- [ ] Custom domain + HTTPS configured (if required)
-
-### 7.11 Troubleshooting
+## Troubleshooting
 
 | Issue | Likely cause | Fix |
 |---|---|---|
@@ -322,6 +220,11 @@ npx wrangler rollback
 | Feed values are zero | Wrong `FTSO_FEED_IDS` for the network | Use correct bytes21 feed IDs for mainnet vs Coston2 |
 | x402 exchange returns 401/500 | Invalid/expired x402 token or missing `JWT_SECRET` | Re-obtain the token; verify secret |
 | `wrangler deploy` fails on bundling `crypto` | `ethers` Node `crypto` import | Ensure `compatibility_flags = ["nodejs_compat"]` is present |
-| First request is slow | Cold start (large `ethers` bundle) | Expected; add `[observability]`, consider caching the feed response |
+| First request is slow | Cold start (large `ethers` bundle) | Expected; `[observability]` is enabled, consider caching the feed response |
 | Cold start budget exceeded | Default Worker CPU/startup budget | Contact Cloudflare to raise `startup_timeout` (Workers paid plan) |
 
+## Related
+
+- [Architecture](architecture.md) — components and design decisions
+- [Launch](launch.md) — production readiness checklist
+- [Testing](testing.md) — test layers and the E2E payment flow

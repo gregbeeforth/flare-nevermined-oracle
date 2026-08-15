@@ -48,7 +48,7 @@ Moving to the Gateway resolves two weaknesses in the current design:
    `{"x402Version":"1.0","accepted":{"planId":"anything"}}`, exchange it for a valid JWT, and get ~1h of feed access **without ever paying**. The E2E script (`test-e2e-worker.sh:40`) even relies on this for local testing.
    The Gateway's `PAYMENT-SIGNATURE` verification happens against a facilitator (open, cryptographic), so a fabricated proof is not accepted.
 
-2. **`JWT_SECRET` drift is an operational footgun.** If the minting and verifying values differ (e.g., local vs remote), every feed call 401s; rotation invalidates all outstanding JWTs (documented in `cloudflare-plan.md` 7.4). Moving payment enforcement to the edge removes the shared-secret contract entirely (or, in the hybrid model, keeps it only internal to the worker).
+2. **`JWT_SECRET` drift is an operational footgun.** If the minting and verifying values differ (e.g., local vs remote), every feed call 401s; rotation invalidates all outstanding JWTs (documented in [deployment.md](deployment.md)). Moving payment enforcement to the edge removes the shared-secret contract entirely (or, in the hybrid model, keeps it only internal to the worker).
 
 ## 4. How the Gateway Maps Onto This Worker
 

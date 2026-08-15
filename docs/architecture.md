@@ -59,41 +59,13 @@ Consumer Agent → Nevermined Proxy → Hono Worker (worker.ts) → FlareConsume
 5. `FlareConsumer.getOracleData()` queries Flare RPC → ContractRegistry → FtsoV2 contract
 6. Response returned as JSON with feeds, block height, network timestamp, and request ID
 
-## Configuration
-
-Configuration is provided through Cloudflare Worker bindings:
-
-| Variable | Binding type | Purpose | Required |
-|----------|--------------|---------|----------|
-| `FLARE_RPC_URL` | `[vars]` | Flare C-chain RPC endpoint | Yes |
-| `FTSO_FEED_IDS` | `[vars]` | Comma-separated FTSO feed IDs to query | Yes |
-| `JWT_SECRET` | secret | Secret for signing/verifying JWTs | Yes |
-| `NODE_ENV` | `[vars]` | Environment | No |
-| `NEVERMINED_PAYMENT_CHAIN` | `[vars]` | Billing chain | No |
-| `NVM_API_KEY` | secret | Nevermined API key (publishing) | No (publish only) |
-| `NEVERMINED_APP_ID` | secret | Nevermined app ID (publishing) | No (publish only) |
-| `NEVERMINED_APP_SECRET` | secret | Nevermined app secret (publishing) | No (publish only) |
-| `RECEIVER_ADDRESS` | secret | Payment receiver address | No (publish only) |
-
-Secrets are set with `wrangler secret put <NAME>` and never committed. There is no `PORT` — Workers have no listening port.
-
 ## Test Architecture
 
 | Test Type | File(s) | Approach | Speed |
 |-----------|---------|----------|-------|
-| Unit | `test/flareConsumer.test.ts`, `test/jwtAuth.test.ts` | Mock `ethers`; test the Hono middleware via a minimal Hono app using `app.request()` | Fast |
+| Unit | `test/flareConsumer.test.ts`, `test/jwtAuth.test.ts`, `test/x402Exchange.test.ts` | Mock `ethers`; test Hono middleware and the exchange route via a minimal Hono app using `app.request()` | Fast |
 | Integration | `test/flareConsumer.integration.test.ts` | Connect to real Coston2 RPC, test `FlareConsumer` methods against live blockchain | Slow |
 | E2E | `test/server.integration.test.ts` | Drive the Hono app directly with `app.request()`, test full request/response cycle | Slow |
-
-## Deployment
-
-```bash
-wrangler login
-wrangler secret put JWT_SECRET
-npm run deploy   # wrangler deploy
-```
-
-The Worker is published to a `*.workers.dev` URL. See `cloudflare-plan.md` for the full migration plan.
 
 ## Key Design Decisions
 
@@ -104,3 +76,8 @@ The Worker is published to a `*.workers.dev` URL. See `cloudflare-plan.md` for t
 - **Algorithm-restricted JWT**: `jwtVerify` enforces `HS256` only, preventing algorithm confusion attacks
 - **Hono**: edge-native router that works on Workers (no `node:http` server) with routing ergonomics suitable for this API
 - **`nodejs_compat`**: required so `ethers` can use Node `crypto` primitives inside workerd
+
+## Related
+
+- [Deployment](deployment.md) — how to run and deploy the Worker
+- [Testing](testing.md) — test layers and the E2E payment flow

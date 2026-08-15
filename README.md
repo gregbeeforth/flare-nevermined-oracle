@@ -5,12 +5,14 @@ A stateless [Cloudflare Worker](https://developers.cloudflare.com/workers/) that
 ## Architecture
 
 ```
-Flare Blockchain RPC → FlareConsumer → Hono Worker → Nevermined Proxy → Consumer Agent
+Consumer Agent → Nevermined Proxy → Hono Worker → FlareConsumer → Flare RPC (FTSOv2)
+                                    ↑
+                              JWT Auth (jose, HS256)
 ```
 
-The Worker entry point is `src/worker.ts` (Hono). It reuses the same `FlareConsumer` and JWT auth modules across the Hono app.
+The Worker entry point is `src/worker.ts` (Hono). It reuses the same `FlareConsumer` and JWT auth modules across the Hono app. See [docs/architecture.md](docs/architecture.md) for details.
 
-## Setup
+## Quickstart
 
 ```bash
 cd flare-nevermined-oracle
@@ -34,7 +36,7 @@ Configuration is provided through Cloudflare Worker bindings. Non-secret values 
 | Variable | Binding type | Description | Default |
 |----------|--------------|-------------|---------|
 | `FLARE_RPC_URL` | `[vars]` | Flare RPC endpoint | `https://flare-api.flare.network/ext/C/rpc` |
-| `FTSO_FEED_IDS` | `[vars]` | Comma-separated FTSO feed IDs | FLR/USD |
+| `FTSO_FEED_IDS` | `[vars]` | Comma-separated FTSO feed IDs (bytes21) | `FLR/USD`, `BTC/USD` |
 | `NODE_ENV` | `[vars]` | Environment | `production` |
 | `NEVERMINED_PAYMENT_CHAIN` | `[vars]` | Billing chain (e.g. base) | `base` |
 | `JWT_SECRET` | secret | JWT signing secret | — |
@@ -43,26 +45,26 @@ Configuration is provided through Cloudflare Worker bindings. Non-secret values 
 | `NEVERMINED_APP_SECRET` | secret | Nevermined application secret | — |
 | `RECEIVER_ADDRESS` | secret | Payment receiver address | — |
 
-`PORT` is not needed — Workers have no listening port.
+Workers have no listening port, so there is no `PORT`.
 
-## Deploying to Cloudflare Workers
+## Deploy
 
 ```bash
 # 1. Authenticate
-wrangler login
+npx wrangler login
 
 # 2. Set secrets (once per environment)
-wrangler secret put JWT_SECRET
-wrangler secret put NVM_API_KEY
-wrangler secret put NEVERMINED_APP_ID
-wrangler secret put NEVERMINED_APP_SECRET
-wrangler secret put RECEIVER_ADDRESS
+npx wrangler secret put JWT_SECRET
+npx wrangler secret put NVM_API_KEY
+npx wrangler secret put NEVERMINED_APP_ID
+npx wrangler secret put NEVERMINED_APP_SECRET
+npx wrangler secret put RECEIVER_ADDRESS
 
 # 3. Deploy
-npm run deploy        # wrangler deploy
+npm run deploy
 ```
 
-The Worker is published to a `*.workers.dev` URL by default (custom domains and `[routes]` can be configured in `wrangler.toml`). Point the Nevermined proxy at this URL to gate the `/api/v1/feed` endpoint.
+The Worker is published to a `*.workers.dev` URL (e.g. `https://flare-nevermined-oracle.flare-oracle.workers.dev`). Point the Nevermined proxy at this URL to gate the `/api/v1/feed` endpoint.
 
 ## Tests
 
@@ -70,8 +72,13 @@ The Worker is published to a `*.workers.dev` URL by default (custom domains and 
 npm test
 ```
 
-## Local Testing
+## Documentation
 
-```bash
-npm run dev   # wrangler dev with hot-reload
-```
+| Doc | Contents |
+|-----|----------|
+| [docs/architecture.md](docs/architecture.md) | Components, data flow, design decisions |
+| [docs/deployment.md](docs/deployment.md) | Local dev, configuration, deploy, troubleshooting |
+| [docs/launch.md](docs/launch.md) | Production readiness checklist |
+| [docs/testing.md](docs/testing.md) | Test layers and the E2E payment flow |
+| [docs/roadmap.md](docs/roadmap.md) | Planned improvements |
+| [docs/monetization-gateway.md](docs/monetization-gateway.md) | Cloudflare Monetization Gateway migration research |
