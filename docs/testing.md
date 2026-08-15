@@ -45,14 +45,14 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:8787/api/v1/feed
 `test-e2e-worker.sh` automates the full flow against the deployed worker:
 
 ```bash
-./test-e2e-worker.sh                       # full flow: purchase → x402 → JWT → feed
-SKIP_PAYMENT=1 ./test-e2e-worker.sh        # worker-side only: health → local JWT → feed
+./test-e2e-worker.sh           # health → x402/JWT → feed (auto-falls back to local JWT)
+PAYMENT=1 ./test-e2e-worker.sh # require the real purchase leg; fail if it can't complete
 ```
 
 - Runs against `https://flare-nevermined-oracle.flare-oracle.workers.dev` by default (override with `REMOTE_URL=...`)
 - Optionally also tests a local `wrangler dev` instance (`RUN_LOCAL=1`, `LOCAL_URL=...`)
 - Verifies the exchanged JWT's `sub` claim matches `NVM_AGENT_ID`
-- `SKIP_PAYMENT=1` mints a JWT locally with `JWT_SECRET` (same algorithm/claims as the worker) and skips the Nevermined purchase leg. Use this when no subscriber payment card is enrolled — the live plan is Stripe/card-delegation and requires a subscriber account with a card to complete payment. The default run prints this hint and exits 1 if it can't obtain an x402 token.
+- The live plan is Stripe/card-delegation and requires a subscriber account with an enrolled card to complete payment. When the x402 token can't be obtained (e.g. no card on the current key), the script **automatically falls back** to minting a local JWT with `JWT_SECRET` (same algorithm/claims as the worker) and continues with the feed check, so the worker-side flow always completes. Set `PAYMENT=1` to require the real purchase leg instead.
 
 ## Manual E2E Flow (Nevermined Sandbox)
 
