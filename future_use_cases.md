@@ -6,7 +6,7 @@
 
 `FlareConsumer.getFeed()` already exists but isn't exposed via HTTP. Add `GET /api/v1/feed/:feedId` for targeted queries.
 
-**Effort:** Low — the `getFeed()` method is already implemented; just needs a new Express route.
+**Effort:** Low — the `getFeed()` method is already implemented; just needs a new Hono route.
 
 ### 2. Query Parameter Filtering
 
@@ -36,9 +36,9 @@ Add a TTL-based cache layer in `FlareConsumer` to reduce RPC calls and improve r
 
 ### 6. Rate Limiting
 
-Add `express-rate-limit` middleware to protect the `/api/v1/feed` endpoint from abuse.
+Add rate limiting to protect the `/api/v1/feed` endpoint from abuse.
 
-**Effort:** Medium — add the middleware and configure limits per IP or per JWT subject.
+**Effort:** Medium — add a rate-limiting middleware and configure limits per IP or per JWT subject.
 
 ### 7. Request Logging / Metrics
 
@@ -68,4 +68,4 @@ Stream live feed updates to clients using Server-Sent Events, leveraging the ~1.
 
 ## Design Notes
 
-The codebase's stateless, singleton design and clean separation of `FlareConsumer` / `Express API` / `JWT Auth` makes all of these natural extensions without refactoring. The `FlareConsumer` class is the single point of extension — new methods can be added there and exposed via new Express routes in `server.ts`.
+The codebase's stateless, singleton design and clean separation of `FlareConsumer` / `Hono API` / `JWT Auth` makes all of these natural extensions without refactoring. The `FlareConsumer` class is the single point of extension — new methods can be added there and exposed via new Hono routes in `src/worker.ts`.

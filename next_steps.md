@@ -16,11 +16,11 @@ npm run test:integration
 ```
 Connects to the real Coston2 testnet to verify `FlareConsumer` can resolve contract addresses and read live FTSO feeds. Free, no real funds at risk.
 
-### 3. E2E Tests Against Live Server (Already in Place)
+### 3. E2E Tests Against the Worker App (Already in Place)
 ```bash
 npm run test:e2e
 ```
-Starts the Express server and tests the full HTTP request/response cycle with `supertest`, including JWT auth and real Flare data.
+Drives the Hono worker app via `app.request()` for the full request/response cycle, including JWT auth and real Flare data.
 
 ### 4. Manual Curl Testing
 Generate a test JWT and manually test the endpoints:
@@ -29,35 +29,27 @@ Generate a test JWT and manually test the endpoints:
 TOKEN=$(node -e "const { SignJWT } = require('jose'); const s = new TextEncoder().encode(process.env.JWT_SECRET); SignJWT({sub:'test'}).setProtectedHeader({alg:'HS256'}).setExpirationTime('1h').sign(s).then(t => console.log(t))")
 
 # Test health endpoint (no auth needed)
-curl http://localhost:3000/health
+curl http://localhost:8787/health
 
 # Test feed endpoint (requires JWT)
-curl -H "Authorization: Bearer $TOKEN" http://localhost:3000/api/v1/feed
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8787/api/v1/feed
 ```
 
-### 5. Docker-Based Local Flare Node (Optional)
-Run a local Flare Coston2 node using Docker to test against a fully controlled environment:
-```bash
-# Example: run a local Flare node with Coston2 config
-docker run -p 9650:9650 flareproject/flare:latest --coston2
-```
-This allows testing with `TEST_RPC_URL=http://localhost:9650/ext/C/rpc` and `TEST_CHAIN_ID=114`. Useful for CI environments or when the public Coston2 RPC is rate-limited.
-
-### 6. Nevermined Sandbox/Test Environment
+### 5. Nevermined Sandbox/Test Environment
 Nevermined provides a sandbox environment for testing the payment gating flow without real transactions:
 - Set `NEVERMINED_APP_ID` and `NEVERMINED_APP_SECRET` to sandbox credentials
 - Use the sandbox Nevermined proxy URL instead of production
 - Test the full payment → JWT → feed access flow end-to-end
 
-### 7. Load Testing (Optional)
+### 6. Load Testing (Optional)
 Before launch, verify the service can handle expected traffic:
 ```bash
 # Install a load testing tool (e.g., autocannon)
-npx autocannon -c 10 -d 30 -p 5 http://localhost:3000/api/v1/feed
+npx autocannon -c 10 -d 30 -p 5 http://localhost:8787/api/v1/feed
 ```
 This sends 10 concurrent connections for 30 seconds with 5 pipelined requests, testing throughput and latency under load.
 
-### 8. Postman/Insomnia API Collection (Optional)
+### 7. Postman/Insomnia API Collection (Optional)
 Create a Postman or Insomnia collection with pre-configured requests for all endpoints, including JWT generation, to make manual testing repeatable and shareable with team members.
 
 ## Running Tests
@@ -85,7 +77,7 @@ npm run build   # compile TypeScript to dist/ before running the server
 ```bash
 npm test              # All tests (unit + integration, requires network access to Coston2)
 npm run test:integration  # Integration tests only (FlareConsumer + server, real Coston2 RPC)
-npm run test:e2e        # E2E tests only (live server + real Flare data via supertest)
+npm run test:e2e        # E2E tests only (Hono app + real Flare data via app.request())
 ```
 
 Note: `npm test` runs all test files matching `**/*.test.ts`, which includes both unit and integration tests. For fast feedback during development, use `npm run test:integration` to run only integration tests, or run unit tests directly with `npx jest --testPathPattern=flareConsumer.test` and `npx jest --testPathPattern=jwtAuth.test`.
@@ -115,33 +107,33 @@ Once `npm run publish-asset` succeeds, the asset is registered with Nevermined a
 
 ### Step 1: Configure the Nevermined Proxy
 
-The Nevermined proxy sits between consumers and your Express API. It handles payment verification, JWT issuance, and request forwarding.
+The Nevermined proxy sits between consumers and your Cloudflare Worker. It handles payment verification, JWT issuance, and request forwarding.
 
-1. **Expose your local server with a public tunnel** — the proxy needs a reachable URL:
+1. **Deploy the Worker** so it has a reachable public URL:
    ```bash
-   ngrok http 3000
+   npm run deploy
    ```
-   This gives you a public URL like `https://abc123.ngrok-free.app`
+   This gives you a public URL like `https://flare-nevermined-oracle.<subdomain>.workers.dev`
 
 2. Go to the [Nevermined App](https://nevermined.app) dashboard
 3. Navigate to **Agents** and find your registered Flare FTSO Oracle Feed agent
-4. In the agent settings, set the **proxy URL** to your tunnel URL (e.g., `https://abc123.ngrok-free.app`)
+4. In the agent settings, set the **proxy URL** to your Worker URL (e.g., `https://flare-nevermined-oracle.flare-oracle.workers.dev`)
 
 The proxy will:
 - Verify that the consumer has an active payment plan
 - Issue a time-bound JWT after successful payment verification
-- Forward validated requests to your Express API at `http://localhost:3000/api/v1/feed`
+- Forward validated requests to your Cloudflare Worker at `https://flare-nevermined-oracle.flare-oracle.workers.dev/api/v1/feed`
 
 ### Step 2: Test the Full Payment Flow Through the Proxy
 
 After the proxy is configured, test the complete flow:
 
 ```bash
-# 1. Start the Express server
+# 1. Run the Worker locally (or use the deployed URL)
 npm run dev
 
-# 2. Test the health endpoint (no auth needed, works without proxy)
-curl http://localhost:3000/health
+# 2. Test the health endpoint (no auth needed)
+curl http://localhost:8787/health
 
 # 3. Test the feed endpoint directly (requires JWT)
 TOKEN=$(node --input-type=module -e "
@@ -153,7 +145,7 @@ const t = await new SignJWT({ sub: 'test-user' })
   .sign(s);
 console.log(t);
 ")
-curl -H "Authorization: Bearer $TOKEN" http://localhost:3000/api/v1/feed
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8787/api/v1/feed
 
 # 4. Test through the Nevermined proxy (requires payment)
 # Replace with your actual proxy URL from Step 1
@@ -213,7 +205,7 @@ When ready to go live:
 3. **Update `FLARE_RPC_URL`** to point to mainnet Flare RPC
 4. **Update `FTSO_FEED_IDS`** to use mainnet feed IDs
 5. **Re-publish the asset**: Run `npm run publish-asset` with live credentials
-6. **Deploy the server** behind a reverse proxy (nginx/Caddy) with HTTPS
+6. **Deploy the Worker** to Cloudflare with `npm run deploy` (HTTPS is automatic on `*.workers.dev`)
 7. **Test the live flow** end-to-end with real payments
 
 ### Step 6: Monitor and Maintain
@@ -223,98 +215,27 @@ When ready to go live:
 - Rotate API keys and JWT secrets periodically
 - Review payment settlement records for auditability
 
-## Docker Deployment
+## Cloudflare Workers Deployment
 
-### Build the Image
+The service runs as a Cloudflare Worker (see `wrangler.toml`). `npm run dev` starts a local `wrangler dev` instance; `npm run deploy` publishes to Workers.
 
-```bash
-docker build -t flare-nevermined-oracle .
-```
-
-### Run Locally with Docker
+### Deploy
 
 ```bash
-docker run -d --name flare-oracle -p 3000:3000 --env-file .env flare-nevermined-oracle
+# 1. Authenticate
+npx wrangler login
 
-# Verify
-curl http://localhost:3000/health
+# 2. Set secrets (once per environment)
+npx wrangler secret put JWT_SECRET
+npx wrangler secret put NVM_API_KEY
+npx wrangler secret put NEVERMINED_APP_ID
+npx wrangler secret put NEVERMINED_APP_SECRET
+npx wrangler secret put RECEIVER_ADDRESS
 
-# Stop
-docker stop flare-oracle && docker rm flare-oracle
+# 3. Deploy
+npm run deploy
 ```
 
-### Run with Docker Compose
+The Worker is published to a `*.workers.dev` URL (e.g., `https://flare-nevermined-oracle.flare-oracle.workers.dev`). Configure the Nevermined proxy URL in the [Nevermined App](https://nevermined.app) dashboard with your Worker URL.
 
-```bash
-docker-compose up -d
-
-# Verify
-curl http://localhost:3000/health
-
-# Stop
-docker-compose down
-```
-
-### Deploy to SnapDeploy
-
-1. Sign up at [snapdeploy.dev](https://snapdeploy.dev)
-2. Connect your Git repository (GitHub)
-3. SnapDeploy auto-detects the `Dockerfile` and builds the image
-4. Set environment variables in the SnapDeploy dashboard:
-   - `NVM_API_KEY` — your sandbox or live Nevermined API key
-   - `NVM_ENVIRONMENT` — `sandbox` or `live`
-   - `NEVERMINED_APP_ID` — from the Nevermined dashboard
-   - `NEVERMINED_APP_SECRET` — from the Nevermined dashboard
-   - `JWT_SECRET` — a strong random secret
-   - `RECEIVER_ADDRESS` — your wallet address
-   - `FLARE_RPC_URL` — `https://coston2-api.flare.network/ext/C/rpc` (sandbox) or mainnet RPC
-   - `FTSO_FEED_IDS` — your FTSO feed IDs
-   - `NEVERMINED_PAYMENT_CHAIN` — `base`
-5. Deploy — SnapDeploy builds and deploys automatically on git push
-6. Get your public URL (e.g., `https://your-app.snapdeploy.app`)
-7. Configure the Nevermined proxy URL in the [Nevermined App](https://nevermined.app) dashboard with your SnapDeploy URL
-
-### Deploy to Render (Free Tier)
-
-1. Push your code to GitHub
-2. Go to [render.com](https://render.com) and create a new Web Service
-3. Connect your repository
-4. Configure:
-   - **Build Command**: `npm run build`
-   - **Start Command**: `node dist/src/server.js`
-   - **Instance Type**: Free tier (0.1 vCPU, 512 MB RAM)
-5. Set environment variables in the Render dashboard (same as SnapDeploy)
-6. Deploy — Render provides a public URL
-7. Configure the Nevermined proxy URL with your Render URL
-
-### Deploy to Google Cloud Run (Generous Free Tier)
-
-1. Authenticate with GCP: `gcloud auth login`
-2. Build and push the image:
-   ```bash
-   gcloud builds submit --tag gcr.io/PROJECT_ID/flare-oracle
-   ```
-3. Deploy:
-   ```bash
-   gcloud run deploy flare-oracle \
-     --image gcr.io/PROJECT_ID/flare-oracle \
-     --platform managed \
-     --region us-central1 \
-     --allow-unauthenticated \
-     --set-env-vars NVM_API_KEY=sandbox:your-key,NVM_ENVIRONMENT=sandbox
-   ```
-4. Note the service URL output by `gcloud run`
-5. Configure the Nevermined proxy URL with the Cloud Run URL
-
-### SnapDeploy vs Render vs Cloud Run Comparison
-
-| Feature | SnapDeploy | Render | Cloud Run |
-|---|---|---|---|
-| Free tier | 10 deploys/day, auto-sleep | 750 hrs/month, cold starts | 180K vCPU-sec/month |
-| Credit card | Not required | Not required | Required |
-| Docker native | Yes | Yes | Yes |
-| Auto-deploy from Git | Yes | Yes | Yes |
-| Custom domain | Yes | Yes | Yes |
-| HTTPS | Yes | Yes | Yes |
-| Cold starts | 10-30s | 30-50s | Yes (scale-to-zero) |
-| Setup complexity | Low | Low | Medium |
+Non-secret configuration lives in `[vars]` in `wrangler.toml` (`FLARE_RPC_URL`, `FTSO_FEED_IDS`, `NODE_ENV`, `NEVERMINED_PAYMENT_CHAIN`).

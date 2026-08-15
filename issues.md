@@ -15,18 +15,18 @@
 **Fix:** Removed the unused `blockNumber` variable assignments in `getFeed()` and `getAllFeeds()`.
 
 ### 5. `server.integration.test.ts` started a server on port 3001 but never used it
-**Fix:** Removed the `beforeAll`/`afterAll` server lifecycle. The test now uses `request(app)` directly with `supertest` (no actual HTTP server needed for Express app testing).
+**Fix:** Removed the `beforeAll`/`afterAll` server lifecycle. The test now drives the Hono app directly with `app.request()` (no HTTP server needed).
 
 ## ✅ Fixed (Important)
 
 ### 6. `jwtVerify` has no algorithm restrictions
 **Fix:** Added `{ algorithms: ["HS256"] }` to `jwtVerify` call in `jwtAuth.ts:42` to prevent algorithm confusion attacks.
 
-### 7. `dotenv.config()` called in both `flareConsumer.ts` and `server.ts`
-**Fix:** Removed `dotenv.config()` from `flareConsumer.ts`. It remains only in `server.ts` (the entry point).
+### 7. `dotenv.config()` called in multiple runtime modules
+**Fix:** Removed `dotenv.config()` from `flareConsumer.ts`. It remains only in Node-side scripts (the Worker reads config from bindings, not `process.env`).
 
 ### 8. `createConsumer()` creates a new provider on every request
-**Fix:** Created a module-level singleton `consumer` in `server.ts` that's reused across all requests instead of creating a new `FlareConsumer` on each `/api/v1/feed` call.
+**Fix:** Created a module-level singleton `consumer` in `worker.ts` that's reused across all requests instead of creating a new `FlareConsumer` on each `/api/v1/feed` call.
 
 ### 9. README documents `ACCESS_TOKEN_SECRET` but code uses `JWT_SECRET`
 **Fix:** Updated the Configuration table in `README.md` to document `JWT_SECRET` instead of the non-existent `ACCESS_TOKEN_SECRET`.

@@ -40,8 +40,7 @@ NEVERMINED_PAYMENT_CHAIN=base
 # Receiver address — where payments are sent
 RECEIVER_ADDRESS=0x00000000000000000000000000000000000000
 
-# Server configuration
-PORT=3000
+# Worker configuration
 NODE_ENV=development
 
 # Test overrides (optional)
@@ -49,12 +48,11 @@ TEST_RPC_URL=https://coston2-api.flare.network/ext/C/rpc
 TEST_CHAIN_ID=114
 ```
 
-### 3. Install Dependencies & Build
+### 3. Install Dependencies
 
 ```bash
 cd flare-nevermined-oracle
 npm install
-npm run build
 ```
 
 ## Deployment Steps
@@ -70,20 +68,20 @@ npm test
 # Run integration tests (real Coston2 RPC)
 npm run test:integration
 
-# Run E2E tests (live server + real Flare data)
+# Run E2E tests (Hono app + real Flare data)
 npm run test:e2e
 ```
 
-### Step 2: Start the Server Locally
+### Step 2: Run the Worker Locally
 
 ```bash
 npm run dev
 ```
 
-The server starts on port 3000 with hot-reload. Verify the health endpoint:
+Starts a local `wrangler dev` instance (default port 8787) with hot-reload. Verify the health endpoint:
 
 ```bash
-curl http://localhost:3000/health
+curl http://localhost:8787/health
 ```
 
 Expected response:
@@ -100,7 +98,7 @@ Generate a JWT for manual testing of the `/api/v1/feed` endpoint:
 
 ```bash
 TOKEN=$(node -e "const { SignJWT } = require('jose'); const s = new TextEncoder().encode(process.env.JWT_SECRET); SignJWT({sub:'test'}).setProtectedHeader({alg:'HS256'}).setExpirationTime('1h').sign(s).then(t => console.log(t))")
-curl -H "Authorization: Bearer $TOKEN" http://localhost:3000/api/v1/feed
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8787/api/v1/feed
 ```
 
 Expected response:
@@ -144,11 +142,11 @@ After publishing, configure the Nevermined proxy to gate the `/api/v1/feed` endp
 3. The proxy will:
    - Verify payment before forwarding requests
    - Issue time-bound JWTs to paying consumers
-   - Forward validated requests to your Express API
+   - Forward validated requests to your Cloudflare Worker API
 
 ### Step 6: Verify Sandbox Deployment
 
-1. Start the Express server (if not already running):
+1. Run the Worker locally (if not already running):
    ```bash
    npm run dev
    ```
@@ -182,29 +180,29 @@ After publishing, configure the Nevermined proxy to gate the `/api/v1/feed` endp
 - [ ] `RECEIVER_ADDRESS` is your production wallet address
 - [ ] `JWT_SECRET` is a strong, unique secret (not `test-jwt-secret`)
 - [ ] `NODE_ENV=production` is set
-- [ ] Server is behind a reverse proxy (nginx/Caddy) with HTTPS
+- [ ] Secrets are set via `wrangler secret put` (`JWT_SECRET`, `NVM_API_KEY`, `NEVERMINED_APP_ID`, `NEVERMINED_APP_SECRET`, `RECEIVER_ADDRESS`)
+- [ ] Worker is deployed with `npm run deploy` and reachable at its `*.workers.dev` URL
 - [ ] CORS is configured for your production domain
 - [ ] Monitoring and alerting are set up for `/health` endpoint
-- [ ] Rate limiting is configured on the Express server
+- [ ] Rate limiting is configured on the Worker
 - [ ] `nevermined publish-asset` has been run with production credentials
 
 ## Rollback
 
 If the deployed service has issues:
 
-1. Stop the server: `Ctrl+C` or `kill <pid>`
-2. Revert `.env` to the previous working configuration
-3. Rebuild: `npm run build`
-4. Restart: `npm start`
-5. Re-publish the asset with the previous configuration if needed
+1. Review worker logs: `npx wrangler tail`
+2. List deployments: `npx wrangler deployments list`
+3. Roll back to a previous stable deployment: `npx wrangler rollback`
+4. Re-publish the asset with the previous configuration if needed
 
 ## Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
 | `ECONNREFUSED` on Coston2 RPC | Check `FLARE_RPC_URL` in `.env`; verify internet connectivity |
-| `JWT_SECRET is not set` | Add `JWT_SECRET` to `.env` |
+| `JWT_SECRET is not set` | Add `JWT_SECRET` to `.env` (local) or run `npx wrangler secret put JWT_SECRET` (remote) |
 | Feed returns zeroed values | Verify `FTSO_FEED_IDS` are correct Coston2 feed IDs |
 | `publish-asset` fails with 401 | Verify `NVM_API_KEY`, `NEVERMINED_APP_ID`, and `NEVERMINED_APP_SECRET` |
 | `Unsupported chain ID` | Check that `FLARE_RPC_URL` matches a supported chain (14, 114, 19, 16) |
-| CORS errors in browser | Configure CORS origins in `server.ts` |
+| CORS errors in browser | Configure CORS origins in `src/worker.ts` |

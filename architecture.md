@@ -102,5 +102,5 @@ The Worker is published to a `*.workers.dev` URL. See `cloudflare-plan.md` for t
 - **Network-aware**: `ContractRegistry` address resolved per chain ID, not hardcoded
 - **Coston2-first**: integration/E2E tests target Coston2 testnet (free, no real funds at risk)
 - **Algorithm-restricted JWT**: `jwtVerify` enforces `HS256` only, preventing algorithm confusion attacks
-- **Hono over Express**: Workers do not support Node's `node:http` server; Hono provides Express-like routing on the edge runtime
+- **Hono**: edge-native router that works on Workers (no `node:http` server) with routing ergonomics suitable for this API
 - **`nodejs_compat`**: required so `ethers` can use Node `crypto` primitives inside workerd

@@ -2,20 +2,20 @@
 
 ## Decisions
 
-- **Routing**: Hono (edge-native, Express-like) replaces Express entirely
-- **Dev/testing**: fully migrated to wrangler (`wrangler dev`; tests drive the Hono app via `app.request()`)
+- **Routing**: Hono (edge-native) on Workers
+- **Dev/testing**: fully wrangler-based (`wrangler dev`; tests drive the Hono app via `app.request()`)
 - **Layout**: flat — `src/worker.ts` + root `wrangler.toml`; shared `src/` modules reused unchanged where possible
 
 ## 1. Compatibility Analysis
 
 | Component | Status | Action |
 |---|---|---|
-| `express` / `cors` | ❌ Node-only (`node:http` server, absent on Workers) | Replace with Hono + `hono/cors` |
-| `dotenv` | ❌ Node-only | Worker bindings (`[vars]` / secrets); kept for Node-side scripts |
+| Routing / CORS | ✅ Edge-native | Hono + `hono/cors` |
+| `dotenv` | ⚠️ Node-only | Worker bindings (`[vars]` / secrets); kept for Node-side scripts |
 | `ethers` 6.17 | ⚠️ Main entry imports bare `crypto`, not `ws`; `JsonRpcProvider` uses global `fetch` | Enable `nodejs_compat` |
 | `jose` 5.10 | ✅ Edge-native (Web Crypto) | No change |
 | `@nevermined-io/payments` | ✅ Scripts only (`publishAsset.ts`, token scripts), not in runtime | No change |
-| `Buffer.from(..., "base64url")` in `decodeX402Token` | ⚠️ Node API | Rewrite with `atob` + base64url → base64 mapping |
+| `Buffer.from(..., "base64url")` in `decodeX402Token` | ⚠️ Node API | Rewritten with `atob` + base64url → base64 mapping |
 | `process.env` reads | ⚠️ `process` not available | Read from `env` binding passed by the fetch handler |
 
 ## 2. Target Architecture
@@ -36,21 +36,18 @@ Single Worker entry `src/worker.ts` exposing a Hono app. Same three routes:
 
 **New files**
 - `wrangler.toml` — name, `main = "src/worker.ts"`, compatibility date, `compatibility_flags = ["nodejs_compat"]`, `[vars]`, `[observability]`
-- `src/worker.ts` — Hono app (migrated from `server.ts`): three routes, `hono/cors`, lazy singleton consumer, `env`-based config
+- `src/worker.ts` — Hono app: three routes, `hono/cors`, lazy singleton consumer, `env`-based config
 - `tsconfig.worker.json` — Worker-typed TS config (`@cloudflare/workers-types`, bundler resolution, `noEmit`)
 
 **Modified files**
-- `src/jwtAuth.ts` — convert Express middleware → Hono middleware (`Context`/`Next`); keep `algorithms: ["HS256"]` restriction; secret passed via `c.env.JWT_SECRET`
+- `src/jwtAuth.ts` — Hono middleware (`Context`/`Next`); `algorithms: ["HS256"]` restriction; secret passed via `c.env.JWT_SECRET`
 - `src/flareConsumer.ts` — `createConsumer(rpcUrl, feedIdsRaw)` accepts explicit args (no `process.env`)
-- `package.json` — add `hono`, `wrangler`, `@cloudflare/workers-types`; remove `express`, `cors`, `@types/express`, `@types/cors`, `supertest`, `@types/supertest`; scripts: `dev: wrangler dev`, `deploy: wrangler deploy`, `typecheck`, `typecheck:worker`
+- `package.json` — `hono`, `wrangler`, `@cloudflare/workers-types`; scripts: `dev: wrangler dev`, `deploy: wrangler deploy`, `typecheck`, `typecheck:worker`
 - Tests — `test/server.integration.test.ts` drives `app.request()`; `test/jwtAuth.test.ts` tests the Hono middleware via a minimal Hono app
 - `README.md` / `architecture.md` — document the Worker deploy path
 
 **Deleted**
-- `src/server.ts` (superseded by `src/worker.ts`)
-
-**Kept (legacy/reference)**
-- `Dockerfile`, `snapdeploy.toml`, `docker-compose.yml`, `snap_deploy.md` — previous deployment path, no longer the primary route
+- `src/server.ts` (superseded by `src/worker.ts`), the old container deployment files, and `test-e2e.sh` — all removed in favor of Workers
 
 ## 4. Environment Variable → Binding Mapping
 
@@ -69,12 +66,12 @@ Single Worker entry `src/worker.ts` exposing a Hono app. Same three routes:
 
 ## 5. Implementation Steps
 
-1. Install tooling: `hono`, `wrangler`, `@cloudflare/workers-types`; remove Node-only runtime deps
+1. Install tooling: `hono`, `wrangler`, `@cloudflare/workers-types`
 2. Write `wrangler.toml`, `tsconfig.worker.json`
 3. Write `src/worker.ts` (Hono app, three routes, cors, lazy singleton consumer, env plumbing, base64url decode)
-4. Convert `src/jwtAuth.ts` to Hono middleware
+4. Write `src/jwtAuth.ts` as Hono middleware
 5. Make `src/flareConsumer.ts` `createConsumer` arg-based
-6. Delete `src/server.ts`; update `package.json` scripts
+6. Update `package.json` scripts
 7. Rework `test/jwtAuth.test.ts` and `test/server.integration.test.ts` to `app.request()`
 8. Verify: `npm run typecheck`, `npm run typecheck:worker`, `npm test`, `wrangler deploy --dry-run` (bundles)
 9. Local run: `npm run dev` → verify `/health`, x402 exchange, feed with JWT
@@ -145,7 +142,7 @@ new SignJWT({sub:'test'})
 curl -H "Authorization: Bearer $TOKEN" http://localhost:8787/api/v1/feed
 ```
 
-For a full local x402 → JWT → feed flow (mirrors `test-e2e.sh` but against `localhost`), with `wrangler dev` running and `JWT_SECRET` set:
+For a full local x402 → JWT → feed flow (mirrors `test-e2e-worker.sh` but against `localhost`), with `wrangler dev` running and `JWT_SECRET` set:
 
 **1. Obtain an x402 token.** `get-x402-token.mjs` reads `NVM_API_KEY`, `NVM_PLAN_ID`, and `NVM_AGENT_ID` from `.env` (via `dotenv`), creates a 7-day erc4337 delegation (USDC, $100 spending limit) with Nevermined, then fetches a real x402 access token and prints it to stdout:
 
@@ -265,9 +262,9 @@ Run the full E2E script once the worker URL is live (see 7.7).
    ```
    https://flare-nevermined-oracle.<your-subdomain>.workers.dev
    ```
-2. Point `test-e2e.sh` at the worker URL (`BASE_URL=...`) or set it via an env override, then run:
+2. Point `test-e2e-worker.sh` at the worker URL (`REMOTE_URL=...`) or use the default, then run:
    ```bash
-   ./test-e2e.sh
+   ./test-e2e-worker.sh
    ```
    This exercises the full purchase → x402 token → JWT → feed flow end to end.
 

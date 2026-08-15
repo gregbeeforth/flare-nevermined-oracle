@@ -8,7 +8,7 @@ A stateless [Cloudflare Worker](https://developers.cloudflare.com/workers/) that
 Flare Blockchain RPC → FlareConsumer → Hono Worker → Nevermined Proxy → Consumer Agent
 ```
 
-The Worker entry point is `src/worker.ts` (Hono). It reuses the same `FlareConsumer` and JWT auth modules as the original Express service, which was retired in favor of the Workers runtime.
+The Worker entry point is `src/worker.ts` (Hono). It reuses the same `FlareConsumer` and JWT auth modules across the Hono app.
 
 ## Setup
 

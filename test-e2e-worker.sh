@@ -9,12 +9,13 @@ set -a
 source .env
 set +a
 
-# Target the Cloudflare Workers. Defaults to local `wrangler dev`
-# (localhost:3000); override with BASE_URL=<worker-url> ./test-e2e-worker.sh
-BASE_URL="${BASE_URL:-http://localhost:3000}"
+# Remote worker: the deployed Cloudflare Worker the Nevermined agent points to.
+# Override with REMOTE_URL=<url>.
 REMOTE_URL="${REMOTE_URL:-https://flare-nevermined-oracle.flare-oracle.workers.dev}"
-echo "Local base URL: $BASE_URL"
-echo "Remote base URL: $REMOTE_URL"
+# Local worker (opt-in): a `wrangler dev` instance. Override with LOCAL_URL=<url>.
+LOCAL_URL="${LOCAL_URL:-http://localhost:3000}"
+echo "Remote worker URL: $REMOTE_URL"
+echo "Local worker URL:  $LOCAL_URL  (set RUN_LOCAL=1 to test locally too)"
 echo ""
 
 if [ -z "$JWT_SECRET" ]; then
@@ -26,6 +27,7 @@ fi
 run_test() {
   local BASE_URL="$1"
   local LABEL="$2"
+  local EXPECT_SUB="$3"
 
   echo "=== E2E Test for $LABEL ($BASE_URL) ==="
 
@@ -46,6 +48,7 @@ run_test() {
     echo "! NVM_API_KEY / NVM_PLAN_ID / NVM_AGENT_ID missing"
     echo "! Fabricating a local x402 token (the exchange endpoint does not verify signatures)"
     X402_TOKEN=$(node -e "console.log(Buffer.from(JSON.stringify({x402Version:'1.0',accepted:{planId:'test-plan',extra:{agentId:'e2e-worker'}}})).toString('base64url'))")
+    EXPECT_SUB="e2e-worker"
   fi
   echo ""
 
@@ -58,6 +61,13 @@ run_test() {
     return 1
   fi
   echo "JWT obtained (${#PROXY_TOKEN} chars)"
+
+  JWT_SUB=$(node -e "console.log(JSON.parse(Buffer.from(process.argv[1].split('.')[1], 'base64url').toString()).sub)" "$PROXY_TOKEN")
+  echo "JWT subject (sub): $JWT_SUB"
+  if [ -n "$EXPECT_SUB" ] && [ "$JWT_SUB" != "$EXPECT_SUB" ]; then
+    echo "ERROR: JWT sub ($JWT_SUB) does not match expected agent ID ($EXPECT_SUB)"
+    return 1
+  fi
   echo ""
 
   echo "--- Step 4: Query Feed ---"
@@ -73,8 +83,8 @@ run_test() {
   echo ""
 }
 
-run_test "$BASE_URL" "local worker"
+run_test "$REMOTE_URL" "remote worker" "$NVM_AGENT_ID"
 
-if [ "$RUN_LOCAL_ONLY" != "1" ]; then
-  run_test "$REMOTE_URL" "remote worker"
+if [ "$RUN_LOCAL" = "1" ]; then
+  run_test "$LOCAL_URL" "local worker" "$NVM_AGENT_ID"
 fi
