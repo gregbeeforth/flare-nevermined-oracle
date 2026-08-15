@@ -1,4 +1,28 @@
-import { FlareConsumer, createConsumer } from "../src/flareConsumer.js";
+import {
+  FlareConsumer,
+  createConsumer,
+  feedIdToPair,
+} from "../src/flareConsumer.js";
+
+describe("feedIdToPair", () => {
+  it("should decode the pair name from a FLR/USD feed ID", () => {
+    expect(feedIdToPair("0x01464c522f55534400000000000000000000000000")).toBe(
+      "FLR/USD",
+    );
+  });
+
+  it("should decode the pair name from a BTC/USD feed ID", () => {
+    expect(feedIdToPair("0x014254432f55534400000000000000000000000000")).toBe(
+      "BTC/USD",
+    );
+  });
+
+  it("should fall back to the raw feed ID when it has no decodable text", () => {
+    expect(feedIdToPair("0x000000000000000000000000000000000000000000")).toBe(
+      "0x000000000000000000000000000000000000000000",
+    );
+  });
+});
 
 describe("createConsumer", () => {
   it("should build a consumer from explicit RPC URL and feed IDs", () => {

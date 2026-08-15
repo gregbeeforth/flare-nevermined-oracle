@@ -20,6 +20,7 @@ const FTSO_V2_ABI = [
 
 export interface FeedResult {
   feedId: string;
+  pair: string;
   value: string;
   decimals: number;
   timestamp: number;
@@ -34,6 +35,20 @@ export interface OracleResponse {
 }
 
 const BYTES21_LENGTH = 42;
+
+export function feedIdToPair(feedId: string): string {
+  const hex = feedId.startsWith("0x") ? feedId.slice(2) : feedId;
+  const bytes = Uint8Array.from(
+    hex.match(/.{1,2}/g)?.map((b) => parseInt(b, 16)) ?? [],
+  );
+  const text = new TextDecoder()
+    .decode(bytes.slice(1))
+    .split("")
+    .filter((ch) => ch.charCodeAt(0) !== 0)
+    .join("")
+    .trim();
+  return text || feedId;
+}
 
 export class FlareConsumer {
   private provider: ethers.JsonRpcProvider;
@@ -117,6 +132,7 @@ export class FlareConsumer {
 
     return {
       feedId: normalizedFeedId,
+      pair: feedIdToPair(normalizedFeedId),
       value: ethers.formatUnits(value, decimals),
       decimals: Number(decimals),
       timestamp: Number(timestamp),
@@ -137,6 +153,7 @@ export class FlareConsumer {
 
     return this.feedIds.map((feedId, index) => ({
       feedId,
+      pair: feedIdToPair(feedId),
       value: ethers.formatUnits(values[index], Number(decodedDecimals[index])),
       decimals: Number(decodedDecimals[index]),
       timestamp: Number(timestamp),

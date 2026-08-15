@@ -36,7 +36,7 @@ Configuration is provided through Cloudflare Worker bindings. Non-secret values 
 | Variable | Binding type | Description | Default |
 |----------|--------------|-------------|---------|
 | `FLARE_RPC_URL` | `[vars]` | Flare RPC endpoint | `https://flare-api.flare.network/ext/C/rpc` |
-| `FTSO_FEED_IDS` | `[vars]` | Comma-separated FTSO feed IDs (bytes21) | `FLR/USD`, `BTC/USD` |
+| `FTSO_FEED_IDS` | `[vars]` | Comma-separated FTSO feed IDs (bytes21) | `FLR/USD`, `BTC/USD`, `XRP/USD`, `ETH/USD`, `DOGE/USD`, `SOL/USD`, `LINK/USD`, `USDC/USD`, `USDT/USD`, `ADA/USD`, `AVAX/USD`, `BNB/USD` |
 | `NODE_ENV` | `[vars]` | Environment | `production` |
 | `NEVERMINED_PAYMENT_CHAIN` | `[vars]` | Billing chain (e.g. base) | `base` |
 | `JWT_SECRET` | secret | JWT signing secret | — |

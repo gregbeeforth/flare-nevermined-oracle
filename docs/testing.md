@@ -95,7 +95,7 @@ For a **fiat (Stripe) plan**, `get-x402-token.mjs` creates a card delegation usi
 | # | Step | Command | Expected Result |
 |---|------|---------|-----------------|
 | 3.1 | Query feed with valid JWT | `curl -s -H "Authorization: Bearer $PROXY_TOKEN" https://flare-nevermined-oracle.flare-oracle.workers.dev/api/v1/feed` | Returns `{"success":true,"data":{"feeds":[...],"blockHeight":...,"networkTimestamp":...}}` |
-| 3.2 | Verify feed data | Check that `feeds` contains entries for the FTSO feed IDs in `.env` (`0x01464c52...` and `0x01425443...`) | Feed values are numeric, timestamps are recent |
+| 3.2 | Verify feed data | Check that `feeds` contains entries for the FTSO feed IDs in `wrangler.toml` (`FTSO_FEED_IDS`; 12 feeds incl. `FLR/USD`, `BTC/USD`, `ETH/USD`, `XRP/USD`) | Feed values are numeric, timestamps are recent |
 | 3.3 | Test with expired/invalid JWT | `curl -s -H "Authorization: Bearer invalid_jwt" https://flare-nevermined-oracle.flare-oracle.workers.dev/api/v1/feed` | Returns 401 with "Invalid or expired token" |
 | 3.4 | Test without JWT | `curl -s https://flare-nevermined-oracle.flare-oracle.workers.dev/api/v1/feed` | Returns 401 with "Missing or malformed Authorization header" |
 

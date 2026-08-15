@@ -26,7 +26,7 @@ POST /api/v1/x402/exchange                                [src/worker.ts:47]
 GET /api/v1/feed  →  requireJwt  →  FlareConsumer → Flare RPC (FTSOv2)
   │                  [src/jwtAuth.ts:20]  [src/flareConsumer.ts]
   ▼
-JSON feeds (FLR/USD, BTC/USD) + blockHeight + timestamp + requestId
+JSON feeds (FLR/USD, BTC/USD, ETH/USD, XRP/USD, SOL/USD, ...) + blockHeight + timestamp + requestId
 ```
 
 Components involved:

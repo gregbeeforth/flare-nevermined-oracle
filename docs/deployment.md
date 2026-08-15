@@ -99,7 +99,7 @@ Two kinds of configuration:
 | `[vars]` key | Example value |
 |---|---|
 | `FLARE_RPC_URL` | `https://flare-api.flare.network/ext/C/rpc` (mainnet) or `https://coston2-api.flare.network/ext/C/rpc` (Coston2 testnet) |
-| `FTSO_FEED_IDS` | `0x01464c522f55534400000000000000000000000000,0x014254432f55534400000000000000000000000000` (FLR/USD, BTC/USD) |
+| `FTSO_FEED_IDS` | Comma-separated bytes21 IDs (12 feeds: FLR/USD, BTC/USD, XRP/USD, ETH/USD, DOGE/USD, SOL/USD, LINK/USD, USDC/USD, USDT/USD, ADA/USD, AVAX/USD, BNB/USD) — see `wrangler.toml` |
 | `NODE_ENV` | `production` |
 | `NEVERMINED_PAYMENT_CHAIN` | `base` |
 
