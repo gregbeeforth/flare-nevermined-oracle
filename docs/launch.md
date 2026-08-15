@@ -69,6 +69,10 @@ NVM_PLAN_ID=...
    ```
    https://flare-nevermined-oracle.flare-oracle.workers.dev
    ```
+3. Optional — in the same **Settings**, set the **Agent definition** field (a discoverable A2A Agent Card) to:
+   ```
+   https://flare-nevermined-oracle.flare-oracle.workers.dev/.well-known/agent.json
+   ```
 
 The proxy will:
 - Verify that the consumer has an active payment plan

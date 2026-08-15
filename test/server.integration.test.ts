@@ -27,6 +27,31 @@ describe("Worker E2E — Coston2 Integration", () => {
     });
   });
 
+  describe("/.well-known/agent.json", () => {
+    it("should return 200 with a valid A2A agent card (unauthenticated)", async () => {
+      const res = await app.request("/.well-known/agent.json");
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toContain("application/json");
+      const card = (await res.json()) as {
+        "@context": string[];
+        "@type": string;
+        name: string;
+        url: string;
+        version: string;
+        skills: unknown[];
+        security: { authenticationSchemes: unknown[] };
+      };
+      expect(card["@context"]).toBeDefined();
+      expect(card["@type"]).toBe("AgentCard");
+      expect(card.name).toBe("Flare FTSO Oracle Feed");
+      expect(card.url).toMatch(/^https:\/\//);
+      expect(card.version).toBeDefined();
+      expect(Array.isArray(card.skills)).toBe(true);
+      expect(card.skills.length).toBeGreaterThan(0);
+      expect(card.security.authenticationSchemes.length).toBeGreaterThan(0);
+    });
+  });
+
   describe("/api/v1/feed", () => {
     it("should return 401 without JWT", async () => {
       const res = await app.request("/api/v1/feed", undefined, env);

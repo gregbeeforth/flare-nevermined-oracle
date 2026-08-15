@@ -28,6 +28,9 @@ npm run dev          # starts wrangler dev server
 | GET | `/api/v1/feed` | Returns FTSO price feeds with block height (JWT-gated) |
 | POST | `/api/v1/x402/exchange` | Exchanges an x402 access token for a time-bound JWT |
 | GET | `/health` | Health check |
+| GET | `/.well-known/agent.json` | A2A Agent Card (discoverable agent definition) |
+
+The Nevermined "Agent definition" metadata field can point at `https://flare-nevermined-oracle.flare-oracle.workers.dev/.well-known/agent.json`.
 
 ## Configuration
 

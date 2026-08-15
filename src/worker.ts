@@ -10,6 +10,7 @@ import {
   verifyX402Token,
 } from "./x402.js";
 import { isRateLimited } from "./rateLimiter.js";
+import { a2aAgentCard } from "./agentDefinition.js";
 
 export interface Env {
   FLARE_RPC_URL?: string;
@@ -179,6 +180,10 @@ app.get("/health", (c) => {
     status: "ok",
     timestamp: new Date().toISOString(),
   });
+});
+
+app.get("/.well-known/agent.json", (c) => {
+  return c.json(a2aAgentCard);
 });
 
 export { app };
