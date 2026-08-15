@@ -67,7 +67,7 @@ X402_TOKEN=$(NVM_API_KEY="$NVM_API_KEY" NVM_PLAN_ID="$NVM_PLAN_ID" NVM_AGENT_ID=
 echo "${#X402_TOKEN} chars"   # a base64url blob
 ```
 
-**2. Exchange it for a short-lived JWT.** POST it as a Bearer token to `/api/v1/x402/exchange`. The handler base64url-decodes the token, reconstructs the `paymentRequired` payload (`planId`, `agentId`, resource `/api/v1/feed`), and calls the Nevermined backend `/api/v1/x402/verify` (`src/x402.ts`) using `NVM_API_KEY`. Only when the backend confirms `isValid` does it sign a fresh 1h HS256 JWT (payload: `sub` = `accepted.extra.agentId`, `planId`, `x402Version`) with `JWT_SECRET`:
+**2. Exchange it for a short-lived JWT.** POST it as a Bearer token to `/api/v1/x402/exchange`. The handler base64url-decodes the token, reconstructs the `paymentRequired` payload (`planId`, `agentId`, resource `/api/v1/feed`), and calls the Nevermined backend `/api/v1/x402/verify` (`src/x402.ts`) using `NVM_API_KEY`. Only when the backend confirms `isValid` does it settle the credits via `/api/v1/x402/settle` (reporting the execution to the Nevermined dashboard) and sign a fresh 1h HS256 JWT (payload: `sub` = `accepted.extra.agentId`, `planId`, `x402Version`) with `JWT_SECRET`:
 
 ```bash
 curl -s -X POST http://localhost:8787/api/v1/x402/exchange \
@@ -76,6 +76,7 @@ curl -s -X POST http://localhost:8787/api/v1/x402/exchange \
 # → { "success": true, "token": "<1h HS256 JWT>" }
 # Missing/malformed auth header, bad base64, missing accepted.planId,
 # or failed payment verification → 401
+# Failed credit settlement → 402
 # Missing NVM_API_KEY on the worker → 500
 ```
 

@@ -8,6 +8,7 @@ import {
   buildPaymentRequired,
   getNvmBackend,
   verifyX402Token,
+  settleX402Token,
 } from "./x402.js";
 import { isRateLimited } from "./rateLimiter.js";
 import { a2aAgentCard } from "./agentDefinition.js";
@@ -135,6 +136,21 @@ app.post("/api/v1/x402/exchange", async (c) => {
         success: false,
         error: `Invalid x402 token: payment verification failed${verification.invalidReason ? ` (${verification.invalidReason})` : ""}`,
       }, 401);
+    }
+
+    const settlement = await settleX402Token({
+      backend: getNvmBackend(nvmApiKey),
+      nvmApiKey,
+      x402AccessToken: x402Token,
+      paymentRequired,
+      agentRequestId: verification.agentRequestId,
+    });
+
+    if (!settlement.success) {
+      return c.json({
+        success: false,
+        error: `x402 settlement failed${settlement.errorReason ? ` (${settlement.errorReason})` : ""}`,
+      }, 402);
     }
 
     const secret = new TextEncoder().encode(c.env.JWT_SECRET);

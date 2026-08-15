@@ -11,6 +11,13 @@ export interface X402Decoded {
 export interface X402VerifyResult {
   isValid: boolean;
   invalidReason?: string;
+  agentRequestId?: string;
+}
+
+export interface X402SettleResult {
+  success: boolean;
+  errorReason?: string;
+  creditsRedeemed?: string;
 }
 
 export interface PaymentRequired {
@@ -101,9 +108,54 @@ export async function verifyX402Token(params: {
     };
   }
 
-  const data = (await response.json()) as { isValid?: boolean; invalidReason?: string };
+  const data = (await response.json()) as {
+    isValid?: boolean;
+    invalidReason?: string;
+    agentRequestId?: string;
+  };
   return {
     isValid: data.isValid === true,
     invalidReason: data.invalidReason,
+    agentRequestId: data.agentRequestId,
+  };
+}
+
+export async function settleX402Token(params: {
+  backend: string;
+  nvmApiKey: string;
+  x402AccessToken: string;
+  paymentRequired: PaymentRequired;
+  agentRequestId?: string;
+}): Promise<X402SettleResult> {
+  const url = new URL("/api/v1/x402/settle", params.backend);
+  const response = await fetch(url.toString(), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${params.nvmApiKey}`,
+    },
+    body: JSON.stringify({
+      paymentRequired: params.paymentRequired,
+      x402AccessToken: params.x402AccessToken,
+      ...(params.agentRequestId ? { agentRequestId: params.agentRequestId } : {}),
+    }),
+  });
+
+  if (!response.ok) {
+    return {
+      success: false,
+      errorReason: `x402 settlement request failed (HTTP ${response.status})`,
+    };
+  }
+
+  const data = (await response.json()) as {
+    success?: boolean;
+    errorReason?: string;
+    creditsRedeemed?: string;
+  };
+  return {
+    success: data.success === true,
+    errorReason: data.errorReason,
+    creditsRedeemed: data.creditsRedeemed,
   };
 }

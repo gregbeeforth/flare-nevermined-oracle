@@ -83,12 +83,14 @@ The proxy will:
 
 The Worker is directly reachable at its `*.workers.dev` URL, so the endpoints must be hardened before going live. The code-level hardening below is already implemented; the remaining items are configuration.
 
-### 5a. x402 token verification (implemented)
+### 5a. x402 token verification + settlement (implemented)
 
-`POST /api/v1/x402/exchange` no longer trusts the decoded x402 claims blindly. It calls the Nevermined backend `/api/v1/x402/verify` endpoint (`src/x402.ts` `verifyX402Token`) and only mints a JWT when the backend confirms `isValid`. The backend URL is derived from the `NVM_API_KEY` prefix (`sandbox:` → `api.sandbox.nevermined.app`, `live:` → `api.live.nevermined.app`).
+`POST /api/v1/x402/exchange` no longer trusts the decoded x402 claims blindly. It calls the Nevermined backend `/api/v1/x402/verify` endpoint (`src/x402.ts` `verifyX402Token`) and only mints a JWT when the backend confirms `isValid`. On success it then **settles** the credits via `/api/v1/x402/settle` (`settleX402Token`), which burns the subscriber's credits and reports the execution back to the Nevermined dashboard — this is what populates the platform's active consumption/execution metrics. The backend URL is derived from the `NVM_API_KEY` prefix (`sandbox:` → `api.sandbox.nevermined.app`, `live:` → `api.live.nevermined.app`).
 
 - Requires `NVM_API_KEY` to be set on the Worker. If missing, the endpoint returns `500` (`x402 verification unavailable`).
 - `paymentRequired` is reconstructed from the token's `planId`, `agentId`, `httpVerb` (`GET`) and resource `/api/v1/feed`, matching the subscriber's payment intent.
+- A failed settlement returns `402` (payment required) and no JWT is minted; a failed verification returns `401`.
+- The `agentRequestId` from the verify response is forwarded to the settle call for observability tracking.
 
 ### 5b. Restrict CORS (implemented)
 
@@ -148,6 +150,7 @@ See [Testing](testing.md) for the detailed manual flow (crypto and fiat payment 
 - [ ] `RATE_LIMIT_MAX`/`RATE_LIMIT_WINDOW_SECONDS` are set (Step 5c)
 - [ ] `NEVERMINED_APP_ID`/`NEVERMINED_APP_SECRET` set as Worker secrets (only needed for `publish-asset`)
 - [ ] Paid purchase flow verified with a real or test subscriber (Step 6)
+- [ ] Active metrics confirmed in the Nevermined App dashboard (exchange settles credits per request, Step 5a)
 - [ ] Monitoring and alerting are set up for `/health`
 
 ## Monitor and Maintain

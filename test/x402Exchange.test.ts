@@ -27,10 +27,29 @@ function makeValidToken(overrides: Record<string, unknown> = {}): string {
 }
 
 function mockVerify(isValid: boolean, invalidReason?: string) {
-  global.fetch = jest.fn().mockResolvedValue({
-    ok: true,
-    status: 200,
-    json: async () => ({ isValid, ...(invalidReason ? { invalidReason } : {}) }),
+  global.fetch = jest.fn().mockImplementation((url: string | URL) => {
+    if (String(url).endsWith("/api/v1/x402/verify")) {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          isValid,
+          ...(invalidReason ? { invalidReason } : {}),
+        }),
+      });
+    }
+    if (String(url).endsWith("/api/v1/x402/settle")) {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ success: true, creditsRedeemed: "1" }),
+      });
+    }
+    return Promise.resolve({
+      ok: false,
+      status: 404,
+      json: async () => ({}),
+    });
   }) as unknown as typeof fetch;
 }
 
@@ -117,33 +136,99 @@ describe("POST /api/v1/x402/exchange", () => {
     });
   });
 
-  it("calls the Nevermined verify endpoint with the payment requirement", async () => {
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({ isValid: true }),
+  it("calls the Nevermined verify and settle endpoints with the payment requirement", async () => {
+    global.fetch = jest.fn().mockImplementation((url: string | URL) => {
+      if (String(url).endsWith("/api/v1/x402/verify")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({ isValid: true, agentRequestId: "req-789" }),
+        });
+      }
+      if (String(url).endsWith("/api/v1/x402/settle")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({ success: true, creditsRedeemed: "1" }),
+        });
+      }
+      return Promise.resolve({ ok: false, status: 404, json: async () => ({}) });
     }) as unknown as typeof fetch;
 
     await exchange(`Bearer ${makeValidToken()}`);
 
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-    const [url, init] = (global.fetch as jest.Mock).mock.calls[0] as [
-      string,
+    const calls = (global.fetch as jest.Mock).mock.calls as [
+      string | URL,
       RequestInit,
-    ];
-    expect(String(url)).toBe(
+    ][];
+    expect(calls).toHaveLength(2);
+
+    const [verifyUrl, verifyInit] = calls[0];
+    expect(String(verifyUrl)).toBe(
       "https://api.sandbox.nevermined.app/api/v1/x402/verify",
     );
-    expect(init.method).toBe("POST");
-    expect((init.headers as Record<string, string>).Authorization).toBe(
+    expect(verifyInit.method).toBe("POST");
+    expect((verifyInit.headers as Record<string, string>).Authorization).toBe(
       `Bearer ${NVM_API_KEY}`,
     );
 
-    const body = JSON.parse(String(init.body));
-    expect(body.x402AccessToken).toBe(makeValidToken());
-    expect(body.paymentRequired.accepts[0].planId).toBe("plan-123");
-    expect(body.paymentRequired.accepts[0].extra.agentId).toBe("agent-456");
-    expect(body.paymentRequired.resource.url).toBe("/api/v1/feed");
+    const verifyBody = JSON.parse(String(verifyInit.body));
+    expect(verifyBody.x402AccessToken).toBe(makeValidToken());
+    expect(verifyBody.paymentRequired.accepts[0].planId).toBe("plan-123");
+    expect(verifyBody.paymentRequired.accepts[0].extra.agentId).toBe("agent-456");
+    expect(verifyBody.paymentRequired.resource.url).toBe("/api/v1/feed");
+
+    const [settleUrl, settleInit] = calls[1];
+    expect(String(settleUrl)).toBe(
+      "https://api.sandbox.nevermined.app/api/v1/x402/settle",
+    );
+    expect(settleInit.method).toBe("POST");
+    expect((settleInit.headers as Record<string, string>).Authorization).toBe(
+      `Bearer ${NVM_API_KEY}`,
+    );
+
+    const settleBody = JSON.parse(String(settleInit.body));
+    expect(settleBody.x402AccessToken).toBe(makeValidToken());
+    expect(settleBody.agentRequestId).toBe("req-789");
+    expect(settleBody.paymentRequired.resource.url).toBe("/api/v1/feed");
+  });
+
+  it("returns 402 when payment settlement fails", async () => {
+    global.fetch = jest.fn().mockImplementation((url: string | URL) => {
+      if (String(url).endsWith("/api/v1/x402/verify")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({ isValid: true }),
+        });
+      }
+      if (String(url).endsWith("/api/v1/x402/settle")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({ success: false, errorReason: "insufficient credits" }),
+        });
+      }
+      return Promise.resolve({ ok: false, status: 404, json: async () => ({}) });
+    }) as unknown as typeof fetch;
+
+    const res = await exchange(`Bearer ${makeValidToken()}`);
+    expect(res.status).toBe(402);
+    expect(await res.json()).toEqual({
+      success: false,
+      error: "x402 settlement failed (insufficient credits)",
+    });
+  });
+
+  it("does not settle when payment verification fails", async () => {
+    mockVerify(false, "insufficient credits");
+    const res = await exchange(`Bearer ${makeValidToken()}`);
+    expect(res.status).toBe(401);
+
+    const settleCalls = (global.fetch as jest.Mock).mock.calls.filter(
+      ([url]) => String(url).endsWith("/api/v1/x402/settle"),
+    );
+    expect(settleCalls).toHaveLength(0);
   });
 
   it("returns 401 when payment verification fails", async () => {

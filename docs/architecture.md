@@ -30,7 +30,7 @@ Consumer Agent → Nevermined Proxy → Hono Worker (worker.ts) → FlareConsume
 - Three endpoints: `GET /api/v1/feed` (JWT-gated), `POST /api/v1/x402/exchange` (public), `GET /health` (public)
 - `GET /.well-known/agent.json` (public) serves the A2A Agent Card — the discoverable agent definition used for the Nevermined "Agent definition" metadata field (`src/agentDefinition.ts`)
 - `/api/v1/feed` calls `FlareConsumer.getOracleData()` and returns `{ success: true, data: OracleResponse }`
-- `/api/v1/x402/exchange` decodes the base64url x402 token, reconstructs the `paymentRequired` payload, verifies it against the Nevermined backend `/api/v1/x402/verify` (`src/x402.ts`), and — only on `isValid` — issues a time-bound (1h) JWT carrying `sub` = `accepted.extra.agentId`, `planId`, `x402Version`
+- `/api/v1/x402/exchange` decodes the base64url x402 token, reconstructs the `paymentRequired` payload, verifies it against the Nevermined backend `/api/v1/x402/verify` (`src/x402.ts`), then — only on `isValid` — **settles** the credits via `/api/v1/x402/settle` (reporting the execution back to the Nevermined dashboard) and issues a time-bound (1h) JWT carrying `sub` = `accepted.extra.agentId`, `planId`, `x402Version`
 - `/health` returns `{ status: "ok", timestamp }` for liveness checks
 - `/.well-known/agent.json` returns the A2A Agent Card (JSON-LD) describing the agent for discovery
 - CORS enabled via `hono/cors`
